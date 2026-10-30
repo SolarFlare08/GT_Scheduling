@@ -1,4 +1,6 @@
 import {setupCampuses} from './campuses.js';
+import {setupScheduleSummary} from './schedule-summary.js';
+let summaryView;
 import {compactCode,shortcutCandidate,companionType} from './search-shortcuts.js';
 import {setupActivities,activeActivities,paintActivities,activityCalendarLines} from './activities.js';
 import {setupWorkspace,openWorkspaceTab,courseStyle} from './workspace.js';
@@ -30,6 +32,9 @@ function calendar(){
   if(previous)$('alternatives').append(previous);
   if(next)$('alternatives').append(next);
  }
+ summaryView?.render();
+ const shown=active,term=$('term').value;
+ if(shown)Promise.allSettled([...new Set(shown.sections.map(s=>s.course))].map(id=>courseGpa(id,term))).then(()=>{if(active===shown&&$('term').value===term)summaryView?.render();});
 }
 async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error);return d;}
 function status(message,error=false){$('status').textContent=message;$('status').className=error?'error':'';}
@@ -71,6 +76,8 @@ document.addEventListener('change',e=>{if(e.target.dataset.role)scheduleAuto();}
 document.addEventListener('click',e=>{const d=e.target.dataset;if(d.exclude||d.prefer)scheduleAuto();});
 
 const activities=setupActivities({state:advanced.state,save:advanced.setEvents,term:()=>$('term').value,changed:()=>{schedules=[];active=null;calendar();status('Activities updated. Find schedules again to apply the new time blocks.');}});
+summaryView=setupScheduleSummary({getSchedule:()=>active,getCourses:()=>courses,getSummaries:id=>gpaSummaries.get($('term').value+':'+id),state:advanced.state,save:advanced.setProfessors});
+summaryView.render();
 try{const d=await api('/api/terms');$('term').innerHTML=d.terms.slice().reverse().map(t=>`<option value="${esc(t.term)}">${({ '02':'Spring','05':'Summer','08':'Fall'})[t.term.slice(4)]||t.term} ${t.term.slice(0,4)}</option>`).join('');await load();}catch(e){status(e.message,true);}
 
 async function renderGpa(id){

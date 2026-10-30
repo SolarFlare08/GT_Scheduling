@@ -17,7 +17,7 @@ async function solveWithGpa(catalog,input){
  if(unavailable.length)result.warnings.push('Course Critique unavailable for '+unavailable.join(', ')+': no GPA preference applied for those courses.');
  return result;
 }
-const files={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/advanced.js':'advanced.js','/data-model.js':'data-model.js','/professor-summary.js':'professor-summary.js','/section-colors.js':'section-colors.js','/workspace.js':'workspace.js','/activities.js':'activities.js','/search-shortcuts.js':'search-shortcuts.js','/campuses.js':'campuses.js'};
+const files={'/schedule-summary.js':'schedule-summary.js','/':'index.html','/app.js':'app.js','/style.css':'style.css','/advanced.js':'advanced.js','/data-model.js':'data-model.js','/professor-summary.js':'professor-summary.js','/section-colors.js':'section-colors.js','/workspace.js':'workspace.js','/activities.js':'activities.js','/search-shortcuts.js':'search-shortcuts.js','/campuses.js':'campuses.js'};
 const server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http://localhost');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-ancestors 'none'");
  const json=(v,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(v));};
  try{if(req.headers.origin&&!['http://localhost:3000','http://127.0.0.1:3000'].includes(req.headers.origin))return json({error:'Origin rejected'},403);

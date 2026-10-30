@@ -78,3 +78,9 @@ Whole free days extending across the Sunday/Monday boundary are ranked before th
 
 Published section attributes are decoded from the crawler. Honors Program sections are excluded by default, including mandatory bundle components. Enable Include Honors Program sections and save advanced preferences to allow them. The filter uses the explicit Honors Program attribute; an Honors course title alone does not identify program membership. Imported catalogs must preserve section attributes for this filter to recognize them. This does not verify registration eligibility.
 `nCourse Critique now loads automatically for selected courses and linked component sources. Solve requests await GPA lookup (cached on the server), then award one bonus per selected course bundle containing a dark green section, using the existing recent GPA and exact instructor matching rules. This bonus shares the whole weekend free day score: one course equals one day. Manual preferences and travel buffers retain precedence. Failed lookups produce warnings and do not block scheduling; unknown or ambiguous GPA earns no bonus.
+# Selected schedule summary and manual RMP entries
+
+A summary below the workspace follows the selected schedule option. It lists all selected sections (including linked components), CRNs, course titles, instructor names, historical average/recent GPA, meeting times, rooms, campuses, and credits. GPA is unknown when matching records are unavailable.
+
+Each named instructor has manual Rate My Professors rating and difficulty fields, from 1–5 or blank. Save ratings persists the entry in the advanced state's professors category, shared across schedule options by normalized full name and included in complete JSON backups. These values are informational and do not currently affect optimization. No RMP page is scraped. Matching is by name, so users should verify the linked profile before entering values.
+
