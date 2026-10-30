@@ -1,6 +1,14 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {solve} from '../lib/optimizer.mjs';import {campusKey} from '../public/campuses.js';
 const s=(crn,campus,component='lecture',code='A')=>({crn,campus,component,code,credits:component==='lecture'?3:0,status:'open',meetings:[{days:'M',start:component==='lecture'?600:700,end:component==='lecture'?650:750}]});
 const input={selections:[{id:'TEST 1000',role:'required'}],minCredits:3};
+test('dark green courses share the whole weekend day priority and do not override manual preferences',()=>{
+ const catalog=[{id:'TEST 1000',sections:[s('1','Atlanta'),s('2','Atlanta')]}];
+ const preferences={maximizeWeekends:true,darkGreenCrns:['2']};
+ assert.equal(solve(catalog,{...input,preferences}).schedules[0].sections[0].crn,'2');
+ assert.equal(solve(catalog,{...input,preferences,selections:[{id:'TEST 1000',role:'required',preferredCrns:['1']}]}).schedules[0].sections[0].crn,'1');
+ const plain=solve(catalog,input).schedules[0],green=solve(catalog,{...input,preferences:{darkGreenCrns:['1','2']}}).schedules[0];
+ assert.equal(plain.score[5]-green.score[5],1);
+});
 test('Honors Program sections are excluded by default, including mandatory components',()=>{
  const normal=s('1','Atlanta'),honors={...s('2','Atlanta'),attributes:['Honors Program']};
  const catalog=[{id:'TEST 1000',sections:[normal,honors]}];
