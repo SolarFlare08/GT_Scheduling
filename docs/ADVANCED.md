@@ -1,5 +1,11 @@
 # Advanced scheduler implementation status
 
+## Campus filtering
+
+Preferences → Campuses is a hard allow-list, defaulting to Atlanta when older saved preferences do not contain a campus setting. Check other campuses explicitly to include them. Selection saves immediately, clears stale schedule alternatives, and triggers optional automatic scheduling. It applies to every lecture, lab and recitation during bundle construction, including recovery. No checked campuses means no eligible sections. Unknown campus is a separate opt-in. The list comes from the loaded catalog and the selection is included in complete-state JSON backups under `preferences.campuses`.
+
+Atlanta aliases `Atlanta` and `Georgia Tech-Atlanta *` normalize to `atlanta`; other names are trimmed, stripped of display asterisks and lowercased for exact matching. Exchange, study-abroad, online and video sections are not implicitly considered Atlanta. This is a campus filter, not a registration-eligibility check; major, program and other restrictions still require verification.
+
 ## Search shortcuts and automatic scheduling
 
 Space or Enter adds an exact normalized course code. Enter also adds a sole remaining result. Ambiguous partial searches do not select an arbitrary first result, and modifier/IME composition repeats do not add multiple courses. The query stays in place so Enter again can select a remaining companion. A standalone recitation/lab is linked to an already selected lecture only when its catalog code is the lecture code plus R/L and its schedule type confirms the component. Other companion naming conventions require manual mapping. Linked components appear beneath the selected lecture and are removed from search suggestions; they do not become independent courses. Matching-letter bundle checks remain mandatory.

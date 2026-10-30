@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {solve,overlap} from '../lib/optimizer.mjs';
-const section=(crn,start=600,status='open')=>({crn,credits:3,status,meetings:[{days:'M',start,end:start+50}],unknownTime:false});
+const section=(crn,start=600,status='open')=>({crn,campus:'Georgia Tech-Atlanta *',credits:3,status,meetings:[{days:'M',start,end:start+50}],unknownTime:false});
 const courses=[{id:'A',sections:[section('1'),section('2',700)]},{id:'B',sections:[section('3',600),section('4',800)]}];
 const selections=[{id:'A',role:'required'},{id:'B',role:'required'}];
 test('nonconflicting required courses and exact minimum-change recovery',()=>{const initial=solve(courses,{selections});assert.equal(initial.schedules[0].score[0],0);assert.equal(initial.optimal,true);const baseline=[courses[0].sections[0],courses[1].sections[1]];const r=solve(courses,{selections,baseline,failed:['1']});assert.equal(r.schedules[0].score[1],1);assert.deepEqual(r.schedules[0].sections.map(s=>s.crn),['2','4']);});

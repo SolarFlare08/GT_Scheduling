@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {solve} from '../lib/optimizer.mjs';
-const s=(code,component,crn,start,status='open')=>({code,component,crn,credits:component==='lecture'?3:0,status,meetings:[{days:'M',start,end:start+40}]});
+const s=(code,component,crn,start,status='open')=>({code,component,crn,campus:'Georgia Tech-Atlanta *',credits:component==='lecture'?3:0,status,meetings:[{days:'M',start,end:start+40}]});
 const catalog=(sections,requiredComponents=['lecture','lab'])=>[{id:'CHEM 1310',requiredComponents,sections}];
 const input={selections:[{id:'CHEM 1310',role:'required'}],minCredits:3};
 test('matching labs and recitations with separate CRNs form complete bundles',()=>{for(const extra of ['lab','recitation']){const d=solve(catalog([s('A','lecture','1',600),s('A01',extra,'2',700),s('B01',extra,'3',800)],['lecture',extra]),input);assert.deepEqual(d.schedules[0].sections.map(s=>s.crn),['1','2']);}});
