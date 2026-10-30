@@ -8,7 +8,7 @@ Run `node server.mjs` and open http://127.0.0.1:3000. On Windows, `.start.ps1` d
 
 Real crawler-v2 course imports, semester search, required/preferred/optional/backup labels, section locks and exclusions, credit bounds, earliest/latest classes, unavailable time blocks, date-aware meeting conflicts, five ranked alternatives, section failure simulation, multi-failure recovery, local saved plans, portable JSON configurations, weekly calendar, and recurring ICS exports. Instructors, rooms, campuses, descriptions and raw prerequisite trees come from the feed. No course data is fabricated.
 
-The exact enumerator uses lexicographic priorities: required courses omitted, original sections changed, preferred courses included, then weekly gaps. Locked sections cannot be removed, even in a failure scenario. It retains five best solutions and reports whether the 250,000-node search limit prevented proof of optimality. This is a small-instance suitable constraint solver, not CP-SAT. At most ten selected courses are accepted. Required omissions are reported rather than silently declared satisfied.
+The exact enumerator uses lexicographic priorities: required courses omitted, original sections changed, preferred courses included, then weekly gaps. Locked sections cannot be removed, even in a failure scenario. It reports whether the 500,000-node search limit prevented proof of optimality. This is a small-instance suitable constraint solver, not CP-SAT. At most ten selected courses are accepted. Required omissions are reported rather than silently declared satisfied.
 
 ## Remaining requirements
 
