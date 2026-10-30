@@ -1,5 +1,11 @@
 # Advanced scheduler implementation status
 
+## Custom activities
+
+The My activities panel beneath selected courses creates, edits and removes weekly recurring activities for the current semester. Each has a name, notes, selected weekdays, start/end time, color, and required/preferred/disabled priority. Required blocks reject overlapping classes; preferred overlaps are penalized by overlapping hours across the shared weekdays. Disabled activities remain stored but do not block or render. These are fixed personal commitments, not academic course credit or movable activities. Settings persist in `gt-advanced-state.events` and complete-state JSON backups.
+
+Activities appear in the weekly calendar before and after generating schedules. Click an activity to edit it. Calendar hours extend to include activities outside the original 07:00–23:00 display. Saving or removing an activity clears generated alternatives and prompts regeneration. ICS export includes weekly activity occurrences, using the loaded semester meeting date range when available; without a loaded date range it begins this week with no recurrence end date. Personal activities do not create walking transfers, course counts or academic credits. Movable/date-specific events remain future work.
+
 ## Workspace navigation
 
 The semester selector sits above course search; results appear only after typing. Selected courses occupy a separate panel with a course count and a shared color palette used by calendar entries. The calendar remains above tabbed tools: Course & instructor details, Preferences, and Data & components. Basic and advanced preference controls share the Preferences panel. The primary Find schedules button remains beside selected courses, and the preference panel also provides Save preferences & find schedules. Browser-local plans and all existing control identifiers are preserved.
