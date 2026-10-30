@@ -1,5 +1,11 @@
 # Advanced scheduler implementation status
 
+## Workspace navigation
+
+The semester selector sits above course search; results appear only after typing. Selected courses occupy a separate panel with a course count and a shared color palette used by calendar entries. The calendar remains above tabbed tools: Course & instructor details, Preferences, and Data & components. Basic and advanced preference controls share the Preferences panel. The primary Find schedules button remains beside selected courses, and the preference panel also provides Save preferences & find schedules. Browser-local plans and all existing control identifiers are preserved.
+
+Data import is presented as Choose file, Review categories/mode, and Confirm. Import stays a preview until confirmation. Plan-only save/load/import/export controls are grouped separately from complete-state JSON backup. Data source notes are collapsed under Data sources & limitations. Restart the server once after this update to make the new workspace module route available, then refresh the browser.
+
 ## Current professor comparison and section preferences
 
 After Course Critique loads, section rows use recent GPA colors: below 3.0 red, 3.0–3.19 yellow, 3.2–3.49 light green, 3.5–3.79 green, 3.8–4.0 dark green. Below 2.5 uses a darker red. Unknown values remain white and each row has a numeric/Unknown label. Co-taught sections use the mean of instructor recent GPAs only when every listed instructor has a known metric. Colors are retained during section preference/lock changes for the current page session; they do not alter optimization scores.
