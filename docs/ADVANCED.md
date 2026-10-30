@@ -1,5 +1,11 @@
 # Advanced scheduler implementation status
 
+## Current professor comparison and section preferences
+
+Course Critique now groups historical records by exact normalized full name and GT ID, showing only professors attached to sections of the selected course and semester. Comma-ordered names and the primary-instructor suffix are normalized; ambiguous multiple-ID matches have metrics withheld. Names with different middle initials are not guessed. Missing matches show Unknown. All-time GPA is the unweighted average of non-suppressed section GPAs through the selected semester; recent GPA covers the latest three reported terms. Population standard deviation describes variation among section GPAs. Record/term counts and suppressed-record counts indicate evidence, not exact student sample size. These statistics describe grade outcomes, not professor quality, and do not automatically change rankings.
+
+Prefer/Unprefer on a section sets a soft CRN preference in the saved plan. Multiple preferred sections are allowed. They rank after required-course retention, minimum original CRN changes, and preferred-course inclusion, but before walking shortfalls and other preference costs. They never override hard constraints, matching component rules, locks, or failed sections. Config exports/imports retain `preferredCrns` in each selected course.
+
 This update implements the mandatory component foundation and part of the JSON and preference phases. It does **not** complete the full advanced specification.
 
 ## Component bundles
