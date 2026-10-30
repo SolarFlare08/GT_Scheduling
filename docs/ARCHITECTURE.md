@@ -1,0 +1,9 @@
+# Architecture
+
+Current layers: `lib/ingestion.mjs` fetches and caches source snapshots and decodes the verified v3 schema; `lib/optimizer.mjs` implements the independent constraint model; `server.mjs` provides same-origin JSON endpoints; `public/` provides the responsive browser interface. Browser-local storage saves personal configurations. Cached snapshots contain no user credentials.
+
+Recommended target: Next.js/React with Tailwind for the UI, FastAPI/Pydantic for validated requests, OR-Tools CP-SAT in a bounded worker for optimization, SQLite with migrations initially and PostgreSQL for hosted concurrent users. Persist normalized snapshots, source timestamps, retrieval times, and upstream failures separately from personal plans. Store an explicit compatibility graph for verified linked registration components. Model each valid combination as a single decision variable; do not infer links from section names.
+
+Use lexicographic solver passes for required course retention, substitutions/drops, section changes, weekly time movement, and preference quality. Each optimum becomes a constraint in the next pass. Enumerate distinct alternatives with exclusion cuts. For resilience, rerun recovery against every individual selected section failure plus user-selected multi-failure sets. Report feasible recovery rate, disruptions, and whether each solve proved optimal. Current implementation only performs explicitly requested failures and section-count disruption.
+
+Add GPA/rating adapters only after endpoint and permission checks. Match institutional instructor identifiers where possible, surface ambiguous name matches, and shrink low-sample ratings toward a prior. Missing values must stay missing. Availability monitoring needs an approved endpoint, bounded polling, backoff, opt-in notifications, and visible freshness. Never store GT account credentials or automate registration.
