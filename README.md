@@ -1,7 +1,5 @@
 # Georgia Tech Resilient Scheduler
 
-Advanced update: mandatory matched component bundles, manual component mapping, JSON catalog imports, and additional scheduling preferences are available. See [advanced implementation status and data format](docs/ADVANCED.md) for current behavior and remaining requirements; older implementation notes below describe the initial version.
-
 Private local development application. Requires Node.js 24 or later; no third-party runtime dependencies.
 
 Run `node server.mjs` and open http://127.0.0.1:3000. On Windows, `.start.ps1` detects Node and launches the server in a separate window, then opens the app. Keep the Node window open. If the browser reports a timeout, run `.start.ps1` again. Run checks with `node --test`. The server binds only to loopback. No deployment or registration automation is configured. First import requires internet access; subsequent requests use ignored local JSON caches in `data/`. Refresh is limited to once per minute per term, concurrent requests are coalesced, and failures fall back to cached data with an error message.

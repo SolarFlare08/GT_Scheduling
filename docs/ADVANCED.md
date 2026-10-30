@@ -67,3 +67,9 @@ Balanced minimizes weekday variance; packed minimizes active weekdays; slider in
 Still required: complete versioned JSON Schema and legacy migrations, granular import conflict preview and full transactional restoration; movable/date-specific events, event editor and ICS integration; manual professor/course editors and objective scoring; workload balancing; configurable weighted/lexicographic/hybrid priorities; substitution groups; full registration workflow; per-component resilience/sensitivity scoring; comparison, profiles and revision history; degree planning. The bounded backtracking search now precomputes valid bundles, orders courses by fewest options and uses sorted result insertion, but remains an enumerative solver rather than CP-SAT. It reports unknown versus infeasible correctly when capped. Search limits remain 500,000 nodes / 15 seconds / 5,000 retained ranked schedules.
 
 No finals/exam conflict detection, automatic registration, GT credential collection, or hosted deployment was added.
+# Maximize weekends
+
+Preferences includes an optional **Maximize weekends** checkbox, saved with advanced preferences and complete state exports. It rewards the continuous class-free interval between the last class of one Monday–Sunday week and the first class of the next. An earlier Friday finish, no Friday classes, a later Monday start, and no Monday classes all improve this score. Weekend classes shorten the interval. All lecture, lab, and recitation meetings count; personal activities do not change this class-only preference.
+
+The penalty is the remaining weekly span in hours and combines with other soft schedule preferences. Required course retention, recovery changes, explicitly preferred courses/sections, and walking buffers retain their existing priority. This option does not guarantee free days or override hard restrictions. Save advanced preferences and generate schedules to apply it.
+
