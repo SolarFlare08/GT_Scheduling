@@ -1,5 +1,11 @@
 # Advanced scheduler implementation status
 
+## Search shortcuts and automatic scheduling
+
+Space or Enter adds an exact normalized course code. Enter also adds a sole remaining result. Ambiguous partial searches do not select an arbitrary first result, and modifier/IME composition repeats do not add multiple courses. The query stays in place so Enter again can select a remaining companion. A standalone recitation/lab is linked to an already selected lecture only when its catalog code is the lecture code plus R/L and its schedule type confirms the component. Other companion naming conventions require manual mapping. Linked components appear beneath the selected lecture and are removed from search suggestions; they do not become independent courses. Matching-letter bundle checks remain mandatory.
+
+Automatically find schedules after changes is an opt-in browser setting beside Find schedules. Course changes, locks, section preferences, basic restrictions, saved advanced preferences and activities trigger a 1.2-second debounce. Typing a search query alone does not run the solver. Only one request runs at a time per page; one latest pending request is retained, and results from superseded inputs are discarded. Turning the toggle off clears the pending automatic work; a request already on the server is not cancelled. Advanced preference edits still require Save preferences before they affect optimization. The existing per-search budget remains 500,000 nodes / 15 seconds; automatic mode can consume noticeable CPU on large selections. Manual Find schedules remains available.
+
 ## Custom activities
 
 The My activities panel beneath selected courses creates, edits and removes weekly recurring activities for the current semester. Each has a name, notes, selected weekdays, start/end time, color, and required/preferred/disabled priority. Required blocks reject overlapping classes; preferred overlaps are penalized by overlapping hours across the shared weekdays. Disabled activities remain stored but do not block or render. These are fixed personal commitments, not academic course credit or movable activities. Settings persist in `gt-advanced-state.events` and complete-state JSON backups.
