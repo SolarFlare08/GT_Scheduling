@@ -71,5 +71,9 @@ No finals/exam conflict detection, automatic registration, GT credential collect
 
 Preferences includes an optional **Maximize weekends** checkbox, saved with advanced preferences and complete state exports. It rewards the continuous class-free interval between the last class of one Monday–Sunday week and the first class of the next. An earlier Friday finish, no Friday classes, a later Monday start, and no Monday classes all improve this score. Weekend classes shorten the interval. All lecture, lab, and recitation meetings count; personal activities do not change this class-only preference.
 
-The penalty is the remaining weekly span in hours and combines with other soft schedule preferences. Required course retention, recovery changes, explicitly preferred courses/sections, and walking buffers retain their existing priority. This option does not guarantee free days or override hard restrictions. Save advanced preferences and generate schedules to apply it.
+Whole free days extending across the Sunday/Monday boundary are ranked before the combined soft preference penalty. Thus a full Friday or Monday off beats a later Monday start plus an earlier Friday finish, when higher priorities tie. The remaining weekly span in hours then combines with other soft preferences. Required course retention, recovery changes, explicitly preferred courses/sections, and walking buffers retain their existing priority. This option does not guarantee free days or override hard restrictions. Save advanced preferences and generate schedules to apply it.
 
+
+## Honors Program filter
+
+Published section attributes are decoded from the crawler. Honors Program sections are excluded by default, including mandatory bundle components. Enable Include Honors Program sections and save advanced preferences to allow them. The filter uses the explicit Honors Program attribute; an Honors course title alone does not identify program membership. Imported catalogs must preserve section attributes for this filter to recognize them. This does not verify registration eligibility.
