@@ -2,7 +2,7 @@ import {validateState} from './public/data-model.js';
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {load,normalize} from './lib/ingestion.mjs';
-import {solve} from './lib/optimizer.mjs';
+import {solveAsync} from './lib/solver-service.mjs';
 import {critique} from './lib/critique.mjs';
 import {summarizeProfessors} from './public/professor-summary.js';
 import {sectionGpa} from './public/section-colors.js';
@@ -13,7 +13,7 @@ async function solveWithGpa(catalog,input){
   const data=await critique(id),summary=summarizeProfessors(data.rows,course.sections,input.term);
   for(const section of course.sections){const gpa=sectionGpa(section,summary);if(gpa!==null&&gpa>=3.8)darkGreenCrns.push(section.crn);if(gpa!==null&&gpa<3)lowGpaCrns.push(section.crn);}
  }catch{unavailable.push(id);}}));
- const result=solve(catalog,{...input,preferences:{...input.preferences,darkGreenCrns,lowGpaCrns}});
+ const result=await solveAsync(catalog,{...input,preferences:{...input.preferences,darkGreenCrns,lowGpaCrns}});
  if(unavailable.length)result.warnings.push('Course Critique unavailable for '+unavailable.join(', ')+': no GPA preference applied for those courses.');
  return result;
 }
