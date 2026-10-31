@@ -12,3 +12,26 @@ export function companionType(course){
  const types=new Set(course.sections.map(s=>s.component||(/recitation|breakout/i.test(s.type||'')?'recitation':/laboratory|\blab\b/i.test(s.type||'')?'lab':'lecture')));
  return types.size===1&&!types.has('lecture')?[...types][0]:null;
 }
+export function automaticComponents(course,catalog,selection){
+ const type=s=>s.component||(/recitation|breakout/i.test(s.type||'')?'recitation':/laboratory|\blab\b/i.test(s.type||'')?'lab':'lecture');
+ const explicit=selection.requiredComponents||course.requiredComponents;
+ const components={...course.componentSources,...selection.components};
+ const required=new Set(explicit||['lecture']),warnings=[];
+ for(const component of ['lab','recitation']){
+  if(components[component]){required.add(component);continue;}
+  // A manual/declared component list takes precedence over inferred relationships.
+  if(explicit&&!required.has(component))continue;
+  const candidates=catalog.filter(c=>{
+   if(c.id===course.id)return c.sections.some(s=>type(s)===component);
+   if(companionType(c)!==component)return false;
+   const reverse=(c.corequisites||[]).some(r=>r.id===course.id);
+   const forward=(course.corequisites||[]).some(r=>r.id===c.id);
+   const suffix=compactCode(c.id)===compactCode(course.id)+(component==='lab'?'L':'R');
+   return reverse||forward||(suffix&&c.sections.every(s=>s.credits===0));
+  });
+  if(candidates.length===1){required.add(component);components[component]=candidates[0].id;}
+  else if(candidates.length>1)warnings.push(`${course.id}: multiple ${component} sources; confirm the mapping in Data & components.`);
+ }
+ const mapped=Object.keys(components).length||required.size>1||explicit;
+ return {selection:{...(mapped?{...selection,requiredComponents:[...required],components:{lecture:course.id,...components}}:selection),componentWarnings:warnings},warnings};
+}

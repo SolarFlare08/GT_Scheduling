@@ -1,7 +1,7 @@
 import {setupCampuses} from './campuses.js';
 import {setupScheduleSummary} from './schedule-summary.js';
 let summaryView;
-import {compactCode,shortcutCandidate,companionType,courseList} from './search-shortcuts.js';
+import {compactCode,shortcutCandidate,companionType,courseList,automaticComponents} from './search-shortcuts.js';
 import {setupActivities,activeActivities,paintActivities,activityCalendarLines} from './activities.js';
 import {setupWorkspace,openWorkspaceTab,courseStyle} from './workspace.js';
 import {paintSections} from './section-colors.js';
@@ -39,7 +39,7 @@ function calendar(){
 async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error);return d;}
 function status(message,error=false){$('status').textContent=message;$('status').className=error?'error':'';}
 async function load(refresh=false){solveRevision++;status('Loading published course snapshot…');try{const d=await api('/api/courses?term='+$('term').value+(refresh?'&refresh=1':''));courses=advanced.catalog()||d.courses;schedules=[];active=null;baseline=[];failed.clear();draw();status(`${courses.length} courses · Published snapshot ${d.cached?'from cache':'retrieved'} · Source updated ${d.updatedAt||'unknown'}${d.refreshError?' · Refresh failed: '+d.refreshError:''}`);$('provenance').textContent=`Source: ${d.source} | Retrieved: ${new Date(d.fetchedAt).toLocaleString()} | Source update: ${d.updatedAt||'unknown'}`;}catch(e){status(e.message,true);}}
-function draw(){for(const id of new Set(selected.flatMap(p=>[p.id,...Object.values(p.components||{})])))courseGpa(id).catch(()=>{});campusFilter.render();scheduleAuto();search();$('selected').innerHTML=selected.map(p=>`<div class="course selected-course" style="${courseStyle(p.id,selected.map(p=>p.id))}"><strong>${esc(p.id)}</strong><button data-remove="${esc(p.id)}">Remove</button><select data-role="${esc(p.id)}" aria-label="Course priority">${['required','preferred','optional','backup'].map(r=>`<option ${p.role===r?'selected':''}>${r}</option>`).join('')}</select><button data-detail="${esc(p.id)}">Compare / lock / exclude sections</button>${p.components?`<p>Linked: ${esc(Object.entries(p.components).filter(([t])=>t!=='lecture').map(([t,id])=>id+' ('+t+')').join(', '))}</p>`:''}${p.lock?`<p>Locked CRN ${esc(p.lock)}</p>`:''}</div>`).join('')||'<p>No courses selected.</p>';calendar();}
+function draw(){for(const id of new Set(selected.flatMap(p=>[p.id,...Object.values(p.components||{})])))courseGpa(id).catch(()=>{});campusFilter.render();scheduleAuto();search();$('selected').innerHTML=selected.map(p=>`<div class="course selected-course" style="${courseStyle(p.id,selected.map(p=>p.id))}"><strong>${esc(p.id)}</strong>${(p.componentWarnings||[]).map(w=>`<p>${esc(w)}</p>`).join('')}<button data-remove="${esc(p.id)}">Remove</button><select data-role="${esc(p.id)}" aria-label="Course priority">${['required','preferred','optional','backup'].map(r=>`<option ${p.role===r?'selected':''}>${r}</option>`).join('')}</select><button data-detail="${esc(p.id)}">Compare / lock / exclude sections</button>${p.components?`<p>Linked: ${esc(Object.entries(p.components).filter(([t])=>t!=='lecture').map(([t,id])=>id+' ('+t+')').join(', '))}</p>`:''}${p.lock?`<p>Locked CRN ${esc(p.lock)}</p>`:''}</div>`).join('')||'<p>No courses selected.</p>';calendar();}
 function addCourse(id,batch=false){
  const c=courses.find(c=>c.id===id);if(!c)return;
  if(selected.some(p=>p.id===id||Object.values(p.components||{}).includes(id)))return;
@@ -48,7 +48,7 @@ function addCourse(id,batch=false){
   if(!parent){if(!batch)status('Add the associated lecture first, then map this component in Data & components.',true);return false;}
   parent.requiredComponents=[...new Set([...(parent.requiredComponents||['lecture']),type])];parent.components={...parent.components,[type]:id};
   if(!batch)status(id+' linked to '+parent.id+' as a required '+type+'.');
- }else if(!selected.some(p=>p.id===id)){if(selected.length>=10){if(!batch)status('Select at most ten courses.',true);return false;}selected.push({id,role:'required',excluded:[]});}
+ }else if(!selected.some(p=>p.id===id)){if(selected.length>=10){if(!batch)status('Select at most ten courses.',true);return false;}const linked=automaticComponents(c,courses,{id,role:'required',excluded:[]});selected.push(linked.selection);if(!batch)status(linked.warnings.join(' ')||'Added '+id+' with its identified linked components.');}
  else return;
  if(!batch)draw();return true;
 }
