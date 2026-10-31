@@ -8,12 +8,12 @@ import {summarizeProfessors} from './public/professor-summary.js';
 import {sectionGpa} from './public/section-colors.js';
 async function solveWithGpa(catalog,input){
  const ids=new Set((input.selections||[]).flatMap(p=>[p.id,...Object.values(p.components||{})]));
- const darkGreenCrns=[],unavailable=[];
+ const darkGreenCrns=[],lowGpaCrns=[],unavailable=[];
  await Promise.all([...ids].map(async id=>{const course=catalog.find(c=>c.id===id);if(!course)return;try{
   const data=await critique(id),summary=summarizeProfessors(data.rows,course.sections,input.term);
-  for(const section of course.sections){const gpa=sectionGpa(section,summary);if(gpa!==null&&gpa>=3.8)darkGreenCrns.push(section.crn);}
+  for(const section of course.sections){const gpa=sectionGpa(section,summary);if(gpa!==null&&gpa>=3.8)darkGreenCrns.push(section.crn);if(gpa!==null&&gpa<3)lowGpaCrns.push(section.crn);}
  }catch{unavailable.push(id);}}));
- const result=solve(catalog,{...input,preferences:{...input.preferences,darkGreenCrns}});
+ const result=solve(catalog,{...input,preferences:{...input.preferences,darkGreenCrns,lowGpaCrns}});
  if(unavailable.length)result.warnings.push('Course Critique unavailable for '+unavailable.join(', ')+': no GPA preference applied for those courses.');
  return result;
 }

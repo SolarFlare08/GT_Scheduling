@@ -7,7 +7,16 @@ test('dark green courses share the whole weekend day priority and do not overrid
  assert.equal(solve(catalog,{...input,preferences}).schedules[0].sections[0].crn,'2');
  assert.equal(solve(catalog,{...input,preferences,selections:[{id:'TEST 1000',role:'required',preferredCrns:['1']}]}).schedules[0].sections[0].crn,'1');
  const plain=solve(catalog,input).schedules[0],green=solve(catalog,{...input,preferences:{darkGreenCrns:['1','2']}}).schedules[0];
- assert.equal(plain.score[5]-green.score[5],1);
+ assert.equal(plain.score[6]-green.score[6],1);
+});
+test('low GPA penalty precedes weekend bonuses, leaves unknown GPA neutral, and allows manual preference overrides',()=>{
+ const catalog=[{id:'TEST 1000',sections:[{...s('low','Atlanta'),meetings:[{days:'TR',start:600,end:660}]},{...s('unknown','Atlanta'),meetings:[{days:'MWF',start:600,end:660}]}]}];
+ const preferences={maximizeWeekends:true,lowGpaCrns:['low']};
+ const result=solve(catalog,{...input,preferences});
+ assert.equal(result.schedules[0].sections[0].crn,'unknown');
+ assert.equal(result.schedules[0].lowGpaCourses,0);
+ assert.equal(result.schedules[1].lowGpaCourses,1);
+ assert.equal(solve(catalog,{...input,preferences,selections:[{id:'TEST 1000',role:'required',preferredCrns:['low']}]}).schedules[0].sections[0].crn,'low');
 });
 test('Honors Program sections are excluded by default, including mandatory components',()=>{
  const normal=s('1','Atlanta'),honors={...s('2','Atlanta'),attributes:['Honors Program']};
