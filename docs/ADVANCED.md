@@ -108,3 +108,13 @@ Validation covers matched complete feasible sets and best scores against Backtra
 
 Implementation follows the official [CP-SAT solver](https://developers.google.com/optimization/cp/cp_solver) and [time-limit](https://developers.google.com/optimization/cp/cp_tasks) APIs.
 
+# Course coverage, compact controls and stable pages (current behavior)
+
+The protected first objective now includes every selected course, regardless of its role label. All selected courses outrank recovery changes and every configurable soft factor. If a complete schedule is impossible under hard restrictions, the best attainable coverage is shown with an explicit omitted-course count. CP-SAT alternative enumeration fixes the proven best coverage and excludes inferior-coverage incumbents from its candidate pool. Exact counts / complete-enumeration claims refer to that maximum-coverage scope, not to all possible partial schedules.
+
+MATH studios are classified as recitation components. They are auto-linked to their lecture, so a zero-credit studio cannot substitute for the four-credit lecture. Existing unmapped selections are upgraded from catalog metadata; explicit manual component declarations remain respected.
+
+The weekly plan uses a compact schedule dropdown and previous/next controls, with globally numbered options and a selected-course coverage count. A separate pair of Previous 50 / Next 50 buttons requests pages by search snapshot ID. Paging bypasses GPA refetching and solving; it preserves the ranked pool, baseline, and failures, and controls remain present after option changes. Search IDs expire with the bounded cache; expired searches produce a prompt to run Find schedules again. Settings changes invalidate the client's current search ID. Cache keys also canonicalize object keys and GPA CRN-set order.
+
+Schedule priorities is an always-visible compact section between the calendar and tool tabs. It has its own Apply priorities action, which saves the ranking and reruns the search when courses are selected. It is not nested in the Preferences tab.
+

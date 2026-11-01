@@ -72,8 +72,8 @@ def solve(data):
         choice = model.new_int_var(-1, len(variables)-1, f'choice_{i}')
         model.add(choice == -1).only_enforce_if(active.Not())
         choices.append(choice)
-        if selection.get('role') == 'required':
-            term('requiredCourses', 1, 1-active)
+        # Every course the user selected is protected before any soft ranking.
+        term('requiredCourses', 1, 1-active)
         if selection.get('role') == 'preferred':
             term('preferredCourses', -1, active)
         for j, (option, x) in enumerate(zip(row['options'], variables)):
@@ -274,11 +274,18 @@ def solve(data):
         raise ValueError('Invalid CP-SAT model: '+validation)
     base = model.clone()
     candidates, seen = [], set()
+    best_coverage = len(rows)+1
     class Collector(cp_model.CpSolverSolutionCallback):
         def __init__(self, enumerating=False):
             super().__init__(); self.enumerating=enumerating
         def on_solution_callback(self):
+            nonlocal best_coverage
             result = tuple(self.value(choice) for choice in choices)
+            omitted = sum(c < 0 for c in result)
+            if omitted < best_coverage:
+                best_coverage=omitted; candidates.clear(); seen.clear()
+            if omitted > best_coverage:
+                return
             if result not in seen and len(candidates) < 5000:
                 seen.add(result); candidates.append(result)
             if self.enumerating and len(candidates) >= 5000:
@@ -309,6 +316,10 @@ def solve(data):
         if status != cp_model.OPTIMAL:
             optimized=False; break
         model.add(objective == solver.value(objective))
+        if stages == 0:
+            # Fill alternative pages with maximal course coverage instead of
+            # spending the candidate pool on schedules missing selected courses.
+            base.add(objective == solver.value(objective))
         optimal_score.append(solver.value(objective)/denominator)
         model.clear_hints()
         for choice in choices:

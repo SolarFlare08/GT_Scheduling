@@ -1,3 +1,4 @@
+// Original enumerator; omission accounting alone follows the new all-selected-course policy.
 import {travelSummary} from '../../lib/travel.mjs';
 import {campusAllowed} from '../../public/campuses.js';
 import {evaluate} from '../../lib/preferences.mjs';
@@ -31,7 +32,7 @@ export function solve(courses,input={}){
    const result={sections:chosen,bundles,credits,score,travel,preferences,preferredSections,darkGreenCourses,lowGpaCourses};let lo=0,hi=results.length;while(lo<hi){const mid=(lo+hi)>>1;if(compare(results[mid].score,score)<=0)lo=mid+1;else hi=mid;}results.splice(lo,0,result);if(results.length>offset+limit)results.pop();return;
   }
   const {p,options}=rows[i];for(const b of options){if(!b.sections.some(s=>chosen.some(t=>s.crn===t.crn||conflict(s,t))))visit(i+1,[...chosen,...b.sections],credits+b.credits,missed,preferred+(p.role==='preferred'?1:0),[...bundles,{course:p.id,crns:b.sections.map(s=>s.crn)}]);}
-  if(!p.lock&&!(p.locks||[]).length&&!p.lockCourse)visit(i+1,chosen,credits,missed+(p.role==='required'?1:0),preferred,bundles);
+  if(!p.lock&&!(p.locks||[]).length&&!p.lockCourse)visit(i+1,chosen,credits,missed+1,preferred,bundles);
  }
  visit(0,[],0,0,0,[]);
  return {schedules:results.slice(offset,offset+limit),feasibleCount,offset,limit,hasMore:feasibleCount>offset+limit&&offset+limit<5000,nodes,optimal:!truncated,status:!feasibleCount?(truncated?'unknown':'infeasible'):truncated?'search-limit':'optimal',warnings:[...rows.filter(r=>!r.options.length).map(r=>`${r.p.id}: no complete bundle satisfies components, availability, locks and times.`),'Mandatory components share their lecture section group.','Walking estimates and double-walking-time preference remain active.','Limits: 500,000 search nodes, 15 seconds, 5,000 ranked schedules. Seat counts are source dependent.']};

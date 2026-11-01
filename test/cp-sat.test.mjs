@@ -11,6 +11,7 @@ const selections=catalog.map(c=>({id:c.id,role:'required'}));
 function signature(schedule){return schedule.sections.map(s=>s.crn).sort().join(',');}
 async function equivalent(catalog,input){
  const expected=solve(catalog,input,{allResults:true}),actual=await solveCpSat(catalog,input);
+ if(expected.schedules.length){expected.schedules=expected.schedules.filter(s=>s.score[0]===expected.schedules[0].score[0]);expected.feasibleCount=expected.schedules.length;}
  assert.equal(actual.feasibleCountIsExact,true,JSON.stringify(actual.solverStats));
  assert.equal(actual.status,expected.status);assert.equal(actual.feasibleCount,expected.feasibleCount);
  assert.deepEqual(actual.schedules.map(signature).sort(),expected.schedules.map(signature).sort());
@@ -42,4 +43,10 @@ test('CP-SAT handles date-disjoint overlapping meetings and sections without mee
  const b={...s('2',600),meetings:[{days:'M',start:600,end:650,from:'2027-03-01',to:'2027-04-01',room:'B'}]};
  await equivalent([{id:'A',sections:[a]},{id:'B',sections:[b]}],{selections,preferences:{maximizeWeekends:true,lunch:{days:['M'],start:600,end:750,duration:80,mode:'preferred'}}});
  await equivalent([{id:'A',sections:[{...a,meetings:[]}]}],{selections:[{id:'A',role:'required'}],preferences:{maximizeWeekends:true}});
+});
+test('including every selected course beats weekend and GPA preferences for every course role',{skip:!available},async()=>{
+ const data=[{id:'A',sections:[s('1',600,'MWF')]},{id:'B',sections:[s('2',800,'TR')]}];
+ const input={selections:[{id:'A',role:'optional'},{id:'B',role:'preferred'}],preferences:{maximizeWeekends:true,ranking:{weekendDays:{rank:1,weight:100},darkGreen:{rank:1,weight:100}},darkGreenCrns:['2']}};
+ const result=await equivalent(data,input);assert.ok(result.schedules.every(s=>s.bundles.length===2));
+ assert.equal(solve(data,input).schedules[0].bundles.length,2);
 });

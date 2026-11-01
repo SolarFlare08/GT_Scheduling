@@ -2,7 +2,7 @@ import {test,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {solve} from '../lib/advanced-optimizer.mjs';
 import {solve as reference} from './fixtures/optimizer-reference.mjs';
-import {solveAsync,closeSolver} from '../lib/solver-service.mjs';
+import {solveAsync,closeSolver,getSearchPage} from '../lib/solver-service.mjs';
 import {Worker} from 'node:worker_threads';
 after(closeSolver);
 test('missing CP-SAT runtime falls back explicitly without breaking existing schedules',async()=>{
@@ -37,6 +37,9 @@ test('worker pages reuse one ranked search and invalidate on changed constraints
  const expected=reference(catalog,{...input,offset:50,limit:50});
  const [first,page]=await Promise.all([solveAsync(catalog,input),solveAsync(catalog,{...input,offset:50})]);
  assert.deepEqual(JSON.parse(JSON.stringify(page.schedules.map(({factorValues,...s})=>s))),JSON.parse(JSON.stringify(expected.schedules)));assert.equal(page.nodes,first.nodes);
+ const snapshotPage=getSearchPage(first.searchId,50,50);assert.deepEqual(snapshotPage.schedules,page.schedules);assert.equal(snapshotPage.searchId,first.searchId);
+ assert.deepEqual(getSearchPage(first.searchId,0,50).schedules,first.schedules);
+ assert.throws(()=>getSearchPage('expired-search',0,50),/expired/);
  first.warnings.push('client mutation');assert.ok(!(await solveAsync(catalog,input)).warnings.includes('client mutation'));
  const changed=await solveAsync(catalog,{...input,failed:['0-0']});
  assert.ok(changed.schedules.every(s=>s.sections.every(s=>s.crn!=='0-0')));

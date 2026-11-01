@@ -21,6 +21,11 @@ test('auto-linking includes internal labs, preserves manual choices and reports 
  const manual=automaticComponents(lecture,catalog,{id:lecture.id,requiredComponents:['lecture','recitation'],components:{recitation:'TEST 1001R'}});
  assert.equal(manual.selection.components.recitation,'TEST 1001R');assert.equal(manual.selection.components.lab,undefined);
 });
+test('zero-credit math studios are linked components, never substitutes for the lecture',()=>{
+ const c={id:'MATH 2552',sections:[{crn:'lecture',code:'A',type:'Lecture*',credits:4,meetings:[{days:'M',start:600,end:650}]},{crn:'studio',code:'A01',type:'Studio*',credits:0,meetings:[{days:'T',start:600,end:650}]}]};
+ const {selection}=automaticComponents(c,[c],{id:c.id});assert.equal(selection.components.recitation,c.id);
+ const options=bundlesFor(c,[c],selection,()=>true);assert.equal(options.length,1);assert.equal(options[0].credits,4);assert.equal(options[0].sections.length,2);
+});
 test('bulk entry accepts comma, semicolon, newline and space separated full codes',()=>{
  for(const query of ['COE3001, ME2202, MATH2552','COE 3001; ME 2202; MATH 2552','COE3001\nME2202\nMATH2552','COE3001 ME2202 MATH2552'])assert.deepEqual(courseList(query).map(compactCode),['COE3001','ME2202','MATH2552']);
  assert.deepEqual(courseList('CS1371R, CS1371, CS1371R'),['CS1371R','CS1371']);
