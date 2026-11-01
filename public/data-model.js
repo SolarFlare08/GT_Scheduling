@@ -1,7 +1,10 @@
+import {rankingGroups} from './ranking.js';
 export const categories=['catalog','preferences','professors','courseRatings','events','profiles','schedules','registration','history','degreePlans'];
 export function validateState(value){
  if(!value||typeof value!=='object'||value.schemaVersion!=='1.0')throw Error('Expected schemaVersion "1.0". Legacy plan files use Import configuration.');
  const state=structuredClone(value);
+ rankingGroups(state.preferences);
+ if(state.preferences?.solverBackend&&!['cp-sat','backtracking'].includes(state.preferences.solverBackend))throw Error('Invalid solver backend.');
  for(const key of categories.filter(k=>!['preferences','registration'].includes(k)))if(state[key]!==undefined&&!Array.isArray(state[key]))throw Error(`${key} must be an array`);
  const crns=new Set(),ids=new Set();for(const c of state.catalog||[]){
   if(!/^[A-Z]{2,5} \d{4}[A-Z]?$/.test(c.id)||ids.has(c.id)||!Array.isArray(c.sections))throw Error(`Invalid or duplicate course ${c.id}`);ids.add(c.id);
