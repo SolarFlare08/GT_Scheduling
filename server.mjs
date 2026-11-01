@@ -17,7 +17,7 @@ async function solveWithGpa(catalog,input){
  if(unavailable.length)result.warnings.push('Course Critique unavailable for '+unavailable.join(', ')+': no GPA preference applied for those courses.');
  return result;
 }
-const files={'/schedule-picker.js':'schedule-picker.js','/ranking.js':'ranking.js','/schedule-summary.js':'schedule-summary.js','/':'index.html','/app.js':'app.js','/style.css':'style.css','/advanced.js':'advanced.js','/data-model.js':'data-model.js','/professor-summary.js':'professor-summary.js','/section-colors.js':'section-colors.js','/workspace.js':'workspace.js','/activities.js':'activities.js','/search-shortcuts.js':'search-shortcuts.js','/campuses.js':'campuses.js'};
+const files={'/search-pages.js':'search-pages.js','/travel.js':'travel.js','/preferences.js':'preferences.js','/schedule-picker.js':'schedule-picker.js','/ranking.js':'ranking.js','/schedule-summary.js':'schedule-summary.js','/':'index.html','/app.js':'app.js','/style.css':'style.css','/advanced.js':'advanced.js','/data-model.js':'data-model.js','/professor-summary.js':'professor-summary.js','/section-colors.js':'section-colors.js','/workspace.js':'workspace.js','/activities.js':'activities.js','/search-shortcuts.js':'search-shortcuts.js','/campuses.js':'campuses.js'};
 const port=Number(process.env.GT_SCHEDULER_PORT??3000);
 const server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http://localhost');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-ancestors 'none'");
  const json=(v,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(v));};

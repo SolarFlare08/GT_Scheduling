@@ -2,7 +2,7 @@ export function scheduleLabel(schedule,index,totalSelected){
  const included=schedule.bundles?.length??new Set(schedule.sections.map(s=>s.course)).size;
  return `Schedule ${index+1} · ${schedule.credits} credits · ${included}/${totalSelected} courses`;
 }
-export function renderSchedulePicker(root,{schedules,active,offset,hasMore,busy,totalSelected,onSelect,onPage}){
+export function renderSchedulePicker(root,{schedules,active,offset,hasMore,busy,totalSelected,onSelect,onPage,message='',error=false}){
  const focus=document.activeElement?.id;root.replaceChildren();root.className='schedule-picker';if(!schedules.length)return;
  const index=schedules.indexOf(active),row=document.createElement('div');row.className='schedule-choice';
  const button=(id,label,disabled,action)=>{const b=document.createElement('button');b.type='button';b.id=id;b.textContent=label;b.disabled=busy||disabled;b.onclick=action;return b;};
@@ -14,5 +14,6 @@ export function renderSchedulePicker(root,{schedules,active,offset,hasMore,busy,
  const nav=document.createElement('div');nav.className='schedule-pages';const count=document.createElement('span');count.textContent=`${offset+1}–${offset+schedules.length}`;count.setAttribute('aria-live','polite');
  nav.append(button('previous-results','Previous 50',offset===0,()=>onPage(Math.max(0,offset-50))),count,button('next-results','Next 50',!hasMore,()=>onPage(offset+50)));
  root.append(row,nav);
+ if(message){const notice=document.createElement('p');notice.id='schedule-page-message';notice.setAttribute('role',error?'alert':'status');notice.textContent=message;notice.className=error?'page-error':'page-notice';root.append(notice);}
  if(focus&&root.querySelector('#'+focus))document.getElementById(focus).focus();
 }

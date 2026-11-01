@@ -1,5 +1,6 @@
 import {setupCampuses} from './campuses.js';
 import {renderSchedulePicker} from './schedule-picker.js';
+import {unpackSearchPage} from './search-pages.js';
 import {setupScheduleSummary} from './schedule-summary.js';
 let summaryView;
 import {compactCode,shortcutCandidate,companionType,courseList,automaticComponents} from './search-shortcuts.js';
@@ -22,6 +23,8 @@ const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,
 let autoTimer,solveRunning=false,pendingSolve=null,solveRevision=0;
 function scheduleAuto(){solveRevision++;searchId=null;clearTimeout(autoTimer);if(!$('auto-schedule')?.checked||!selected.length)return;autoTimer=setTimeout(()=>optimize(false,0),1200);}
 let courses=[],selected=[],schedules=[],active=null,baseline=[],failed=new Set(),resultOffset=0,lastRecovery=false,resultHasMore=false,searchId=null;
+let searchSnapshot=null,snapshotRevision=0,snapshotSelection='',pageMessage='',pageError=false;
+const selectionKey=()=>JSON.stringify(selected.map(p=>[p.id,p.components,p.requiredComponents]));
 const time=v=>v.split(':').reduce((h,m)=>+h*60+ +m),clock=v=>`${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`;
 function calendar(){
  renderCalendar();
@@ -31,7 +34,19 @@ function calendar(){
  const shown=active,term=$('term').value;
  if(shown)Promise.allSettled([...new Set(shown.sections.map(s=>s.course))].map(id=>courseGpa(id,term))).then(()=>{if(active===shown&&$('term').value===term)summaryView?.render();});
 }
-function renderPicker(){renderSchedulePicker($('alternatives'),{schedules,active,offset:resultOffset,hasMore:resultHasMore,busy:solveRunning,totalSelected:selected.length,onSelect:s=>{active=s;calendar();},onPage:offset=>optimize(lastRecovery,offset,true)});}
+function selectSchedule(s){active=s;if(!lastRecovery){baseline=s.sections;failed.clear();}calendar();}
+function renderPicker(){renderSchedulePicker($('alternatives'),{schedules,active,offset:resultOffset,hasMore:resultHasMore,busy:solveRunning,totalSelected:selected.length,message:pageMessage,error:pageError,onSelect:selectSchedule,onPage:changePage});}
+function changePage(offset){
+ if(solveRunning)return;
+ if(!searchSnapshot)return optimize(lastRecovery,offset,true);
+ try{
+  const d=unpackSearchPage(searchSnapshot,offset,50);
+  resultOffset=d.offset;resultHasMore=d.hasMore;schedules=d.schedules;active=schedules[0]||null;
+  if(!lastRecovery){baseline=active?.sections||[];failed.clear();}
+  pageError=false;pageMessage=snapshotRevision===solveRevision?'':'Viewing the saved search. Find schedules applies your latest changes.';
+  $('analysis').textContent=resultOverview(d);calendar();
+ }catch(error){pageMessage=error.message;pageError=true;renderPicker();}
+}
 async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error);return d;}
 function status(message,error=false){$('status').textContent=message;$('status').className=error?'error':'';}
 function resultOverview(d){
@@ -46,7 +61,7 @@ function resultStatus(d){
  return d.optimal?'Search complete; objective proved optimal for the implemented model.':'Search limit reached; optimality is unproven.';
 }
 async function load(refresh=false){solveRevision++;status('Loading published course snapshot…');try{const d=await api('/api/courses?term='+$('term').value+(refresh?'&refresh=1':''));courses=advanced.catalog()||d.courses;schedules=[];active=null;baseline=[];failed.clear();draw();status(`${courses.length} courses · Published snapshot ${d.cached?'from cache':'retrieved'} · Source updated ${d.updatedAt||'unknown'}${d.refreshError?' · Refresh failed: '+d.refreshError:''}`);$('provenance').textContent=`Source: ${d.source} | Retrieved: ${new Date(d.fetchedAt).toLocaleString()} | Source update: ${d.updatedAt||'unknown'}`;}catch(e){status(e.message,true);}}
-function draw(){selected=selected.map(p=>{const c=courses.find(c=>c.id===p.id);return c?automaticComponents(c,courses,p).selection:p;});for(const id of new Set(selected.flatMap(p=>[p.id,...Object.values(p.components||{})])))courseGpa(id).catch(()=>{});campusFilter.render();scheduleAuto();search();$('selected').innerHTML=selected.map(p=>`<div class="course selected-course" style="${courseStyle(p.id,selected.map(p=>p.id))}"><strong>${esc(p.id)}</strong>${(p.componentWarnings||[]).map(w=>`<p>${esc(w)}</p>`).join('')}<button data-remove="${esc(p.id)}">Remove</button><select data-role="${esc(p.id)}" aria-label="Course priority">${['required','preferred','optional','backup'].map(r=>`<option ${p.role===r?'selected':''}>${r}</option>`).join('')}</select><button data-detail="${esc(p.id)}">Compare / lock / exclude sections</button>${p.components?`<p>Linked: ${esc(Object.entries(p.components).filter(([t])=>t!=='lecture').map(([t,id])=>id+' ('+t+')').join(', '))}</p>`:''}${p.lock?`<p>Locked CRN ${esc(p.lock)}</p>`:''}</div>`).join('')||'<p>No courses selected.</p>';calendar();}
+function draw(){selected=selected.map(p=>{const c=courses.find(c=>c.id===p.id);return c?automaticComponents(c,courses,p).selection:p;});if(searchSnapshot&&snapshotSelection!==selectionKey()){searchSnapshot=null;searchId=null;schedules=[];active=null;baseline=[];failed.clear();pageMessage='';}for(const id of new Set(selected.flatMap(p=>[p.id,...Object.values(p.components||{})])))courseGpa(id).catch(()=>{});campusFilter.render();scheduleAuto();search();$('selected').innerHTML=selected.map(p=>`<div class="course selected-course" style="${courseStyle(p.id,selected.map(p=>p.id))}"><strong>${esc(p.id)}</strong>${(p.componentWarnings||[]).map(w=>`<p>${esc(w)}</p>`).join('')}<button data-remove="${esc(p.id)}">Remove</button><select data-role="${esc(p.id)}" aria-label="Course priority">${['required','preferred','optional','backup'].map(r=>`<option ${p.role===r?'selected':''}>${r}</option>`).join('')}</select><button data-detail="${esc(p.id)}">Compare / lock / exclude sections</button>${p.components?`<p>Linked: ${esc(Object.entries(p.components).filter(([t])=>t!=='lecture').map(([t,id])=>id+' ('+t+')').join(', '))}</p>`:''}${p.lock?`<p>Locked CRN ${esc(p.lock)}</p>`:''}</div>`).join('')||'<p>No courses selected.</p>';calendar();}
 function addCourse(id,batch=false){
  const c=courses.find(c=>c.id===id);if(!c)return;
  if(selected.some(p=>p.id===id||Object.values(p.components||{}).includes(id)))return;
@@ -79,13 +94,16 @@ async function optimize(recovery=false,offset=0,paging=false){
  try{
   if(!selected.length)throw Error('Add at least one course.');
   if(paging&&!searchId)throw Error('Settings changed. Click Find schedules before changing pages.');
+  pageError=false;pageMessage=paging?'Loading schedule page…':'Searching…';renderPicker();
   status(paging?'Loading schedule page…':recovery?'Searching recovery options…':'Searching course combinations…');
   const request=paging?{searchId,offset,limit:50}:{...config(),catalog:advanced.catalog(),preferences:{...advanced.state().preferences,events:[...(advanced.state().preferences?.events||[]),...activeActivities(advanced.state(),$('term').value)]},availability:advanced.state().registration?.availability,offset,limit:50,failed:recovery?[...failed]:[],baseline:recovery?baseline:[]};
   const d=await api('/api/solve',request);if(revision!==solveRevision)return;
   resultOffset=d.offset;resultHasMore=d.hasMore;searchId=d.searchId;lastRecovery=recovery;schedules=d.schedules;active=schedules[0]||null;
+  if(!paging){searchSnapshot=d.snapshot||null;snapshotRevision=revision;snapshotSelection=selectionKey();if(searchSnapshot)searchSnapshot.meta.warnings=d.warnings;}
+  pageMessage='';pageError=false;
   if(!paging&&!recovery){baseline=active?.sections||[];failed.clear();}
   $('analysis').textContent=resultOverview(d);status(resultStatus(d));calendar();
- }catch(e){if(revision===solveRevision)status(e.message,true);}
+ }catch(e){if(revision===solveRevision){pageMessage=e.message;pageError=true;status(e.message,true);}}
  finally{solveRunning=false;renderPicker();if(pendingSolve){const next=pendingSolve;pendingSolve=null;optimize(next.recovery,next.offset,next.paging);}}
 }
 function renderCalendar(){renderPicker();if(!active){$('failures').innerHTML='';$('travel').innerHTML='';}$('calendar').innerHTML='<div class="hours">'+Array.from({length:16},(_,i)=>`<div>${i+7}:00</div>`).join('')+'</div>'+[...'MTWRFSU'].map((d,i)=>`<div class="day"><b>${['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}</b>${(active?.sections||[]).flatMap(s=>s.meetings.filter(m=>m.days.includes(d)).map(m=>`<button class="event ${failed.has(s.crn)?'failed':''}" data-fail="${esc(s.crn)}" style="${courseStyle(s.course,selected.map(p=>p.id))};top:${25+(m.start-420)/2}px;height:${Math.max(22,(m.end-m.start)/2)}px" title="Simulate loss of ${esc(s.course)} ${esc(s.code)}">${esc(s.course)} · ${esc(s.code)}<br>${clock(m.start)}–${clock(m.end)}</button>`)).join('')}</div>`).join('');$('travel').innerHTML=active?.travel?`<h3>Travel between consecutive classes</h3><p>Estimated walking distance and time, not routed directions. ${active.travel.unknown} transfers have unknown locations.</p><div class="tablewrap"><table><tr><th>Day / transition</th><th>Distance</th><th>Walk / gap</th><th>Buffer</th></tr>${active.travel.transfers.map(t=>`<tr><td>${esc(t.day)}: ${esc(t.from)} → ${esc(t.to)}<br>${esc(t.fromRoom)} → ${esc(t.toRoom)}</td><td>${t.unknown?'Unknown':t.meters+' m'}</td><td>${t.unknown?'Unknown':t.minutes+' min'} / ${t.gap} min</td><td>${t.unknown?'Unknown':t.shortfall>0?'Below 2× walk time':'Meets 2× walk time'}</td></tr>`).join('')}</table></div>`:'';$('failures').innerHTML=baseline.map(s=>`<label class="check"><input type="checkbox" data-failure="${esc(s.crn)}" ${failed.has(s.crn)?'checked':''}> Fail ${esc(s.course)} ${esc(s.code)} ${selected.some(p=>p.lock===s.crn)?'(locked)':''}</label>`).join('');}
