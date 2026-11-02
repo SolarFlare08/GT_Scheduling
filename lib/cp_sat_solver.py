@@ -303,7 +303,7 @@ def solve(data):
         if remaining < 0.02:
             optimized=False; break
         solver = cp_model.CpSolver(); solver.parameters.max_time_in_seconds=remaining
-        solver.parameters.num_search_workers=4
+        solver.parameters.num_search_workers=1 if data['input'].get('backgroundPreparation') else 4
         model.minimize(objective)
         status = solver.solve(model, Collector())
         branches += solver.num_branches

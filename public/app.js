@@ -1,6 +1,6 @@
 import {setupCampuses} from './campuses.js';
 import {renderSchedulePicker} from './schedule-picker.js';
-import {unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode} from './search-pages.js';
+import {unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode,prepareFailureBranches} from './search-pages.js';
 import {setupScheduleSummary} from './schedule-summary.js';
 let summaryView;
 import {compactCode,shortcutCandidate,companionType,courseList,automaticComponents} from './search-shortcuts.js';
@@ -31,7 +31,7 @@ function recoveryView(){return {node:recoveryNode,snapshot:searchSnapshot,schedu
 function restoreRecovery(view){
  recoveryGeneration++;pendingSolve=null;
  recoveryNode=view.node;searchSnapshot=view.snapshot;schedules=view.schedules;active=view.active;baseline=view.baseline;failed=new Set(view.failed);resultOffset=view.offset;resultHasMore=view.hasMore;lastRecovery=view.lastRecovery;
- pageMessage='Restored the previous schedule and failures.';pageError=false;$('analysis').textContent=view.analysis;status(pageMessage);calendar();
+ pageMessage='Restored the previous schedule and failures.';pageError=false;$('analysis').textContent=view.analysis;status(pageMessage);calendar();improveRecoveryBranch(recoveryNode);
 }
 function failSection(crn){
  if(failed.has(crn)||solveRunning)return;
@@ -40,15 +40,15 @@ function failSection(crn){
 }
 function recoveryRequest(){return {...config(),catalog:advanced.catalog(),preferences:{...advanced.state().preferences,events:[...(advanced.state().preferences?.events||[]),...activeActivities(advanced.state(),$('term').value)]},availability:advanced.state().registration?.availability,offset:0,limit:50,failed:[...failed],baseline};}
 async function improveRecoveryBranch(node){
+ if(!node||!active||recoveryPoolKey!==recoverySettingsKey())return;
  if(preparingRecovery){queuedRecoveryNode=node;return;}
  preparingRecovery=true;
  const generation=++recoveryGeneration,key=recoverySettingsKey();
- $('recovery-ready').textContent='Preparing the next failure branches…';
  try{
-  const d=await api('/api/solve',recoveryRequest());
-  if(generation!==recoveryGeneration||node!==recoveryNode||key!==recoverySettingsKey())return;
-  if(d.snapshot){const prepared=prepareRecoveryNode(d.snapshot,baseline,[...failed],active);node.snapshot=prepared.snapshot;node.branches=prepared.branches;}
-  $('recovery-ready').textContent='Next failure branches prepared (up to 200 schedules each).';
+  await prepareFailureBranches(node,JSON.parse(JSON.stringify(recoveryRequest())),request=>api('/api/solve',request),{
+   isCurrent:()=>generation===recoveryGeneration&&node===recoveryNode&&key===recoverySettingsKey(),
+   onProgress:({done,total,section,errors,complete})=>{$('recovery-ready').textContent=complete?`Recovery preparation: ${done}/${total} section failures searched.${errors?' Some searches failed; preloaded options remain available.':''}`:`Preparing recoveries ${done}/${total} · ${section.course} ${section.code}… You can keep using the calendar.`;}
+  });
  }catch(error){if(generation===recoveryGeneration)$('recovery-ready').textContent='Using prepared options. Further preparation failed: '+error.message;}
  finally{preparingRecovery=false;const next=queuedRecoveryNode;queuedRecoveryNode=null;if(next&&next===recoveryNode)improveRecoveryBranch(next);}
 }
@@ -57,10 +57,10 @@ function quickRecovery(){
  if(!recoveryPool||!baseline.length||!failed.size||recoveryPoolKey!==recoverySettingsKey())return false;
  const branch=recoveryNode?.branches.get([...failed].at(-1));
  const snapshot=branch||trimSnapshot(recoverySnapshot(recoveryNode?.snapshot||recoveryPool,baseline,[...failed]));
- if(!snapshot.schedules.length)return false;
+ if(!snapshot.schedules.length&&snapshot.meta.status!=='infeasible')return false;
  const d=unpackSearchPage(snapshot);
  searchSnapshot=snapshot;searchId=null;lastRecovery=true;resultOffset=0;resultHasMore=d.hasMore;schedules=d.schedules;active=schedules[0];
- pageError=false;pageMessage='Quick recovery from preloaded schedules. Refine recovery runs a full search.';
+ pageError=false;pageMessage=snapshot.meta.status==='infeasible'?'No recovery satisfies the current restrictions for these failures. Go back or change your restrictions.':recoveryNode?.searched.has([...failed].at(-1))?'Recovery loaded from its prepared search.':'Quick recovery from preloaded schedules while failure searches prepare.';
  recoveryNode=prepareRecoveryNode(snapshot,baseline,[...failed],active);
  $('analysis').textContent=resultOverview(d);status(pageMessage);calendar();improveRecoveryBranch(recoveryNode);return true;
 }
@@ -74,7 +74,7 @@ function calendar(){
  const shown=active,term=$('term').value;
  if(shown)Promise.allSettled([...new Set(shown.sections.map(s=>s.course))].map(id=>courseGpa(id,term))).then(()=>{if(active===shown&&$('term').value===term)summaryView?.render();});
 }
-function selectSchedule(s){active=s;recoveryGeneration++;if(!lastRecovery){baseline=s.sections;failed.clear();recoveryHistory=[];}if(searchSnapshot)recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);calendar();}
+function selectSchedule(s){active=s;recoveryGeneration++;if(!lastRecovery){baseline=s.sections;failed.clear();recoveryHistory=[];}if(searchSnapshot)recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);calendar();improveRecoveryBranch(recoveryNode);}
 function renderPicker(){if($('undo-failure'))$('undo-failure').disabled=!recoveryHistory.length||solveRunning;renderSchedulePicker($('alternatives'),{schedules,active,offset:resultOffset,hasMore:resultHasMore,busy:solveRunning,totalSelected:selected.length,message:pageMessage,error:pageError,onSelect:selectSchedule,onPage:changePage});}
 function changePage(offset){
  if(solveRunning)return;
@@ -85,7 +85,7 @@ function changePage(offset){
   if(!lastRecovery){baseline=active?.sections||[];failed.clear();}
   recoveryGeneration++;if(!lastRecovery)recoveryHistory=[];recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);
   pageError=false;pageMessage=snapshotRevision===solveRevision?'':'Viewing the saved search. Find schedules applies your latest changes.';
-  $('analysis').textContent=resultOverview(d);calendar();
+  $('analysis').textContent=resultOverview(d);calendar();improveRecoveryBranch(recoveryNode);
  }catch(error){pageMessage=error.message;pageError=true;renderPicker();}
 }
 async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error);return d;}
@@ -132,6 +132,7 @@ function config(){const blocked=$('blocked').value.trim().split(';').filter(x=>x
 async function optimize(recovery=false,offset=0,paging=false,refine=false){
  if(recovery&&!paging&&!refine&&!solveRunning){try{if(quickRecovery())return;}catch(error){status(error.message,true);return;}}
  if(solveRunning){if(!paging)pendingSolve={recovery,offset,paging,refine};return;}
+ recoveryGeneration++;queuedRecoveryNode=null;
  solveRunning=true;clearTimeout(autoTimer);renderPicker();const revision=solveRevision,generation=recoveryGeneration;
  try{
   if(!selected.length)throw Error('Add at least one course.');
@@ -150,11 +151,11 @@ async function optimize(recovery=false,offset=0,paging=false,refine=false){
    recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);
    searchSnapshot=recoveryNode.snapshot;schedules=unpackSearchPage(searchSnapshot).schedules;resultOffset=0;resultHasMore=searchSnapshot.schedules.length>50;
    if(!recovery){recoveryPool=searchSnapshot;recoveryHistory=[];recoveryGeneration++;}
-   $('recovery-ready').textContent='Failure branches prepared (up to 200 schedules each).';
+   $('recovery-ready').textContent='Preparing a recovery search for each section in this schedule…';
   }
   $('analysis').textContent=resultOverview({...d,schedules,offset:resultOffset})+' Keeping the top 200 schedules per branch; remaining candidates were used to prepare section-failure branches and discarded.';status(resultStatus(d));calendar();
  }catch(e){if(revision===solveRevision){pageMessage=e.message;pageError=true;status(e.message,true);}}
- finally{solveRunning=false;renderPicker();if(pendingSolve){const next=pendingSolve;pendingSolve=null;optimize(next.recovery,next.offset,next.paging,next.refine);}}
+ finally{solveRunning=false;renderPicker();if(pendingSolve){const next=pendingSolve;pendingSolve=null;optimize(next.recovery,next.offset,next.paging,next.refine);}else if(revision===solveRevision)improveRecoveryBranch(recoveryNode);}
 }
 function renderCalendar(){renderPicker();if(!active){$('failures').innerHTML='';$('travel').innerHTML='';}$('calendar').innerHTML='<div class="hours">'+Array.from({length:16},(_,i)=>`<div>${i+7}:00</div>`).join('')+'</div>'+[...'MTWRFSU'].map((d,i)=>`<div class="day"><b>${['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}</b>${(active?.sections||[]).flatMap(s=>s.meetings.filter(m=>m.days.includes(d)).map(m=>`<button class="event ${failed.has(s.crn)?'failed':''}" data-fail="${esc(s.crn)}" style="${courseStyle(s.course,selected.map(p=>p.id))};top:${25+(m.start-420)/2}px;height:${Math.max(22,(m.end-m.start)/2)}px" title="Simulate loss of ${esc(s.course)} ${esc(s.code)}">${esc(s.course)} · ${esc(s.code)}<br>${clock(m.start)}–${clock(m.end)}</button>`)).join('')}</div>`).join('');$('travel').innerHTML=active?.travel?`<h3>Travel between consecutive classes</h3><p>Estimated walking distance and time, not routed directions. ${active.travel.unknown} transfers have unknown locations.</p><div class="tablewrap"><table><tr><th>Day / transition</th><th>Distance</th><th>Walk / gap</th><th>Buffer</th></tr>${active.travel.transfers.map(t=>`<tr><td>${esc(t.day)}: ${esc(t.from)} → ${esc(t.to)}<br>${esc(t.fromRoom)} → ${esc(t.toRoom)}</td><td>${t.unknown?'Unknown':t.meters+' m'}</td><td>${t.unknown?'Unknown':t.minutes+' min'} / ${t.gap} min</td><td>${t.unknown?'Unknown':t.shortfall>0?'Below 2× walk time':'Meets 2× walk time'}</td></tr>`).join('')}</table></div>`:'';$('failures').textContent=failed.size?'Unavailable sections: '+[...failed].map(crn=>{const section=recoveryHistory.flatMap(v=>v.active?.sections||[]).find(s=>s.crn===crn);return section?section.course+' '+section.code+' ('+crn+')':crn;}).join(' · '):'No failed sections.';if($('undo-failure'))$('undo-failure').disabled=!recoveryHistory.length||solveRunning;}
 document.addEventListener('click',e=>{const d=e.target.dataset;if(d.add)addCourse(d.add);if(d.remove){selected=selected.filter(p=>p.id!==d.remove);draw();}if(d.detail)detail(d.detail);if(d.lock){const p=selected.find(p=>p.id===d.course);p.lock=p.lock===d.lock?null:d.lock;detail(d.course);draw();}if(d.exclude){const p=selected.find(p=>p.id===d.course);p.excluded=p.excluded.includes(d.exclude)?p.excluded.filter(x=>x!==d.exclude):[...p.excluded,d.exclude];detail(d.course);}if(d.prefer){const p=selected.find(p=>p.id===d.course);p.preferredCrns=p.preferredCrns||[];p.preferredCrns=p.preferredCrns.includes(d.prefer)?p.preferredCrns.filter(c=>c!==d.prefer):[...p.preferredCrns,d.prefer];localStorage.setItem('gt-plan',JSON.stringify(config()));detail(d.course);status('Section preference saved. Click Find schedules to apply.');}if(d.option!==undefined){active=schedules[+d.option];calendar();}if(d.fail)failSection(d.fail);});
@@ -166,7 +167,7 @@ const refineRecovery=document.createElement('button');refineRecovery.id='refine-
 const undoFailure=document.createElement('button');undoFailure.id='undo-failure';undoFailure.textContent='Go back';undoFailure.disabled=true;undoFailure.onclick=()=>{const previous=recoveryHistory.pop();if(previous)restoreRecovery(previous);};$('recover').before(undoFailure);
 const recoveryReady=document.createElement('p');recoveryReady.id='recovery-ready';recoveryReady.setAttribute('role','status');$('failures').after(recoveryReady);
 $('recover').textContent='Quick minimum-change recovery';
-$('calendar').parentElement.querySelector('.hint').textContent='Click a class to fail that section. Up to 200 schedules are kept per prepared branch. Next failure branches prepare in the background after each choice. Go back undoes a failure; Clear failures restores your starting schedule. Refine recovery runs a full search. Locks remain enforced.';
+$('calendar').parentElement.querySelector('.hint').textContent='The initial search uses a 15-second search budget. Recovery searches then prepare each section failure in the background, keeping up to 200 schedules per branch. Click a class to follow its failure branch; preparation moves to the schedule now shown. Go back undoes a failure. Locks remain enforced.';
 function download(name,text,type='application/json'){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 $('save').onclick=()=>{localStorage.setItem('gt-plan',JSON.stringify(config()));status('Plan saved in this browser.');};
 async function restore(p){if(!p||!Array.isArray(p.selections)||p.selections.length>10||![...$('term').options].some(o=>o.value===p.term))throw Error('Invalid configuration');$('term').value=p.term;await load();selected=p.selections.filter(p=>courses.some(c=>c.id===p.id)).map(p=>({...p,excluded:Array.isArray(p.excluded)?p.excluded:[]}));$('min').value=p.minCredits;$('max').value=p.maxCredits;$('early').value=clock(p.earliest);$('late').value=clock(p.latest);$('unknown').checked=!!p.allowUnknown;$('blocked').value=(p.blocked||[]).map(b=>`${b.days} ${clock(b.start)}-${clock(b.end)}`).join('; ');draw();}

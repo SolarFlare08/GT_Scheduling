@@ -50,5 +50,25 @@ export function prepareRecoveryNode(pool,baseline,failed=[],shown=null){
   if(branches.has(section.crn)||failed.includes(section.crn))continue;
   branches.set(section.crn,trimSnapshot(recoverySnapshot(pool,baseline,[...failed,section.crn])));
  }
- return {snapshot,branches,baseline,failed:[...failed]};
+ return {snapshot,branches,baseline,failed:[...failed],sections:current?.sections||[],searched:new Set()};
+}
+
+// Search every one-section failure of the schedule currently on screen. Only
+// the selected path gets another level, keeping preparation and memory bounded.
+export async function prepareFailureBranches(node,request,solve,{isCurrent=()=>true,onProgress=()=>{}}={}){
+ const sections=[...new Map(node.sections.map(s=>[s.crn,s])).values()].filter(s=>!node.failed.includes(s.crn));
+ const total=sections.length;let errors=0;
+ for(const section of sections){
+  if(!isCurrent())return;
+  if(node.searched.has(section.crn))continue;
+  onProgress({done:node.searched.size,total,section,errors});
+  try{
+   const d=await solve({...request,baseline:node.baseline,failed:[...new Set([...node.failed,section.crn])],backgroundPreparation:true});
+   if(!isCurrent())return;
+   if(!d.snapshot)throw Error('Recovery search returned no snapshot.');
+   const branch=trimSnapshot(d.snapshot);branch.meta.warnings=d.warnings||branch.meta.warnings;
+   node.branches.set(section.crn,branch);node.searched.add(section.crn);
+  }catch(error){if(!isCurrent())return;errors++;onProgress({done:node.searched.size,total,section,errors,error:error.message});}
+ }
+ if(isCurrent())onProgress({done:node.searched.size,total,errors,complete:true});
 }

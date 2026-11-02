@@ -1,8 +1,26 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {solve} from '../lib/advanced-optimizer.mjs';
-import {packSearchResult,unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode} from '../public/search-pages.js';
+import {packSearchResult,unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode,prepareFailureBranches} from '../public/search-pages.js';
 const json=value=>JSON.parse(JSON.stringify(value));
+test('background searches find failure recoveries beyond the initial pool and reuse completed branches',async()=>{
+ const catalog=['A','B'].map((id,i)=>({id,sections:[0,1].map(j=>({crn:id+j,code:String(j),campus:'Atlanta',credits:3,meetings:[{days:i?'T':'M',start:480+j*60,end:530+j*60}]}))}));
+ const input={selections:catalog.map(c=>({id:c.id})),preferences:{solverBackend:'backtracking'}};
+ const initial=solve(catalog,input,{allResults:true}),baseline=initial.schedules[0].sections;
+ const node=prepareRecoveryNode(packSearchResult({...initial,schedules:initial.schedules.slice(0,1)}),baseline);
+ assert.ok([...node.branches.values()].every(branch=>branch.schedules.length===0));
+ const calls=[],progress=[];
+ const search=async request=>{calls.push(request);const result=solve(catalog,request,{allResults:true});return {...result,snapshot:packSearchResult(result)};};
+ await prepareFailureBranches(node,input,search,{onProgress:p=>progress.push(p)});
+ assert.equal(calls.length,2);assert.equal(node.searched.size,2);
+ for(const request of calls){assert.equal(request.backgroundPreparation,true);assert.deepEqual(request.baseline,baseline);assert.equal(request.failed.length,1);const branch=node.branches.get(request.failed[0]);assert.ok(branch.schedules.length);assert.ok(unpackSearchPage(branch).schedules.every(s=>s.sections.every(s=>s.crn!==request.failed[0])));}
+ assert.equal(progress.at(-1).done,2);assert.equal(progress.at(-1).complete,true);
+ await prepareFailureBranches(node,input,search);assert.equal(calls.length,2);
+ // Changing the displayed schedule stops the old path and discards its result.
+ const obsolete=prepareRecoveryNode(packSearchResult(initial),baseline);let current=true,count=0;
+ await prepareFailureBranches(obsolete,input,async request=>{count++;current=false;return search(request);},{isCurrent:()=>current});
+ assert.equal(count,1);assert.equal(obsolete.searched.size,0);
+});
 test('compact browser snapshot preserves complete schedules and pages without a server',()=>{
  const catalog=Array.from({length:3},(_,i)=>({id:'C'+i,sections:Array.from({length:5},(_,j)=>({crn:`${i}-${j}`,code:'A',campus:'Atlanta',credits:3,status:'open',meetings:[{days:['M','T','W'][i],start:480+j*60,end:530+j*60,room:'Room '+j}]}))}));
  const preferences={maximizeWeekends:true,distributionWeight:1,packed:50,lunch:{days:['M'],start:660,end:840,duration:45,mode:'preferred'}};

@@ -5,6 +5,14 @@ import {solve as reference} from './fixtures/optimizer-reference.mjs';
 import {solveAsync,closeSolver,getSearchPage} from '../lib/solver-service.mjs';
 import {Worker} from 'node:worker_threads';
 after(closeSolver);
+test('foreground and preparation searches keep separate constraints and return valid recovery pools',async()=>{
+ const catalog=[{id:'A',sections:[{crn:'1',code:'A',campus:'Atlanta',credits:3,meetings:[{days:'M',start:600,end:650}]},{crn:'2',code:'B',campus:'Atlanta',credits:3,meetings:[{days:'T',start:600,end:650}]}]}];
+ const input={selections:[{id:'A'}],preferences:{solverBackend:'backtracking'}};
+ const [prepared,normal]=await Promise.all([solveAsync(catalog,{...input,failed:['1'],backgroundPreparation:true}),solveAsync(catalog,input)]);
+ assert.ok(prepared.schedules.every(s=>s.sections.every(s=>s.crn!=='1')));
+ assert.ok(normal.schedules.some(s=>s.sections.some(s=>s.crn==='1')));
+ assert.notEqual(normal.searchId,prepared.searchId);assert.ok(prepared.snapshot.schedules.length);
+});
 test('missing CP-SAT runtime falls back explicitly without breaking existing schedules',async()=>{
  const worker=new Worker(new URL('../lib/solver-worker.mjs',import.meta.url),{env:{...process.env,GT_SOLVER_PYTHON:'missing-python-for-cp-sat-test'}});
  try{const result=await new Promise((resolve,reject)=>{worker.once('error',reject);worker.once('message',message=>message.error?reject(Error(message.error)):resolve(message.result));worker.postMessage({id:1,courses:[{id:'A',sections:[{crn:'1',code:'A',campus:'Atlanta',credits:3,meetings:[{days:'M',start:600,end:650}]}]}],input:{selections:[{id:'A',role:'required'}]}});});
