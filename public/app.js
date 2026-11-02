@@ -189,7 +189,26 @@ summaryView=setupScheduleSummary({getSchedule:()=>active,getCourses:()=>courses,
 summaryView.render();
 try{const d=await api('/api/terms');$('term').innerHTML=d.terms.slice().reverse().map(t=>`<option value="${esc(t.term)}">${({ '02':'Spring','05':'Summer','08':'Fall'})[t.term.slice(4)]||t.term} ${t.term.slice(0,4)}</option>`).join('');await load();}catch(e){status(e.message,true);}
 
+let courseDetailTab='sections';
+function setupCourseDetailNavigation(){
+ const root=$('details');if(root.querySelector('.course-detail-tabs'))return;
+ const records=$('gpa-records'),load=root.querySelector('[data-gpa]'),table=records.nextElementSibling,note=load.previousElementSibling;
+ const nav=document.createElement('div');nav.className='course-detail-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Course comparison');records.before(nav);
+ const professors=document.createElement('div');professors.id='course-professors';professors.className='course-detail-panel';
+ const sections=document.createElement('div');sections.id='course-sections';sections.className='course-detail-panel';
+ const professorHeading=document.createElement('h4');professorHeading.textContent='Current professors & GPA';
+ const sectionHeading=document.createElement('h4');sectionHeading.textContent='Sections · '+table.querySelectorAll('[data-section-crn]').length+' options';
+ const help=document.createElement('p');help.className='hint';help.textContent='Compare meeting times and use Lock, Prefer or Exclude to choose sections.';
+ professors.append(professorHeading,note,load,records);sections.append(sectionHeading,help,table);nav.after(professors,sections);
+ for(const [key,label,panel] of [['professors','Professors',professors],['sections','Sections',sections]]){
+  const button=document.createElement('button');button.type='button';button.textContent=label;button.id='course-detail-tab-'+key;button.setAttribute('role','tab');button.setAttribute('aria-controls',panel.id);panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);
+  button.onclick=()=>{courseDetailTab=key;for(const tab of nav.children){const selected=tab===button;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$(tab.getAttribute('aria-controls')).hidden=!selected;}};nav.append(button);
+ }
+ nav.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const tabs=[...nav.children],current=tabs.indexOf(document.activeElement),next=event.key==='Home'?0:event.key==='End'?1:1-current;tabs[next].click();tabs[next].focus();});
+ nav.querySelector('#course-detail-tab-'+courseDetailTab).click();
+}
 async function renderGpa(id){
+ setupCourseDetailNavigation();
  const target=$('gpa-records'),semester=$('term').value;if(!target)return;
  const sections=courses.find(c=>c.id===id)?.sections||[];
  target.textContent='Loading Course Critique…';
