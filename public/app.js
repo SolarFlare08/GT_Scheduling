@@ -6,7 +6,7 @@ let summaryView;
 import {compactCode,shortcutCandidate,companionType,courseList,automaticComponents} from './search-shortcuts.js';
 import {setupActivities,activeActivities,paintActivities,activityCalendarLines} from './activities.js';
 import {setupWorkspace,openWorkspaceTab,courseStyle} from './workspace.js';
-import {paintSections} from './section-colors.js';
+import {paintSections,gpaColor} from './section-colors.js';
 const gpaSummaries=new Map();
 const gpaRequests=new Map();
 function courseGpa(id,semester=$('term').value){
@@ -198,7 +198,7 @@ async function renderGpa(id){
  gpaSummaries.set(semester+':'+id,summary);paintSections($('details'),{sections},summary);
  target.innerHTML='<p class="gpa-legend">Section colors use recent GPA: red &lt;3.0 · yellow 3.0–3.19 · light green 3.2–3.49 · green 3.5–3.79 · dark green 3.8–4.0 · white unknown. Co-taught sections use the mean only when all instructors have data. Color describes historical grades, not teaching quality.</p><p>Only instructors with sections of this course in the selected semester. Exact normalized full-name matches only. GPA is the unweighted average of available historical section records, not a student-weighted average or a teaching-quality rating. Recent GPA covers the latest three reported terms through the selected semester. SD measures variation across section GPAs; fewer records mean less evidence.</p>'+
  '<p>Retrieved '+esc(new Date(d.fetchedAt).toLocaleString())+(d.refreshError?' · Cached after error: '+esc(d.refreshError):'')+'</p>'+
- '<div class="tablewrap"><table><tr><th>Current professor / sections</th><th>Average GPA</th><th>Recent GPA</th><th>GPA SD</th><th>Evidence</th></tr>'+summary.map(r=>'<tr><td>'+esc(r.name)+'<br>'+esc(r.sections.join(', '))+'<br>'+esc(r.instructorId||'No unique GT ID match')+'</td><td>'+fmt(r.averageGpa)+'</td><td>'+fmt(r.recentGpa)+'</td><td>'+fmt(r.standardDeviation)+'</td><td>'+(r.ambiguous?'Ambiguous identity: multiple GT IDs; metrics withheld':r.recordCount+' GPA records / '+r.termCount+' terms; '+r.suppressedCount+' unavailable records')+'</td></tr>').join('')+'</table></div>';
+ '<div class="tablewrap"><table><tr><th>Current professor / sections</th><th>Average GPA</th><th>Recent GPA</th><th>GPA SD</th><th>Evidence</th></tr>'+summary.map(r=>{const color=gpaColor(r.recentGpa);return '<tr style="background-color:'+color.background+';color:'+color.color+'" title="'+esc(color.label)+'"><td>'+esc(r.name)+'<br>'+esc(r.sections.join(', '))+'<br>'+esc(r.instructorId||'No unique GT ID match')+'</td><td>'+fmt(r.averageGpa)+'</td><td>'+fmt(r.recentGpa)+'</td><td>'+fmt(r.standardDeviation)+'</td><td>'+(r.ambiguous?'Ambiguous identity: multiple GT IDs; metrics withheld':r.recordCount+' GPA records / '+r.termCount+' terms; '+r.suppressedCount+' unavailable records')+'</td></tr>';}).join('')+'</table></div>';
  if(!summary.length)target.textContent='No named instructors are available in the current semester sections.';
  }catch(e){target.textContent=e.message;}
 }
