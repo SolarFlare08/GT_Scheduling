@@ -22,8 +22,11 @@ export function setupWorkspace(){
  const preferencesFooter=document.createElement('div');preferencesFooter.className='preference-footer';const generate=document.createElement('button');generate.className='primary';generate.textContent='Save preferences & find schedules';generate.onclick=()=>{$('save-preferences').click();if($('preferences-message').textContent.startsWith('Saved.'))$('solve').click();};preferencesFooter.append(generate);prefs.append(preferencesFooter);
  const nav=document.createElement('div');nav.className='workspace-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Scheduler tools');
  const tools=document.createElement('div');tools.className='workspace-tools';details.before(tools);tools.append(nav);
- tools.before($('ranking-preferences'));
- const panels={details,preferences:prefs,data};
+ const preferencePair=document.createElement('div');preferencePair.className='preference-pair';
+ preferencePair.append(prefs,$('ranking-preferences'));
+ tools.append(preferencePair);
+ setupPreferenceNavigation(prefs);
+ const panels={details,preferences:preferencePair,data};
  for(const [name,panel] of Object.entries(panels)){const button=document.createElement('button');button.textContent={details:'Course & instructor details',preferences:'Preferences',data:'Data & components'}[name];button.dataset.workspaceTab=name;button.id='tab-'+name;button.setAttribute('role','tab');button.setAttribute('aria-controls','panel-'+name);panel.id='panel-'+name;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);button.onclick=()=>{for(const [key,p] of Object.entries(panels)){p.hidden=key!==name;const b=nav.querySelector(`[data-workspace-tab="${key}"]`);b.setAttribute('aria-selected',String(key===name));b.tabIndex=key===name?0:-1;}localStorage.setItem('gt-workspace-tab',name);};nav.append(button);tools.append(panel);}
  nav.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const tabs=[...nav.children],i=tabs.indexOf(document.activeElement);const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].click();tabs[next].focus();});
  openWorkspaceTab(['details','preferences','data'].includes(localStorage.getItem('gt-workspace-tab'))?localStorage.getItem('gt-workspace-tab'):'details');
@@ -39,4 +42,22 @@ export function setupWorkspace(){
  new MutationObserver(()=>{review.hidden=false;final.hidden=confirm.disabled;}).observe(preview,{childList:true,subtree:true,characterData:true});
  $('full-export').textContent='Download complete JSON backup';const exportBox=document.createElement('div');exportBox.className='data-step';exportBox.innerHTML='<h3>Export a backup</h3><p>Download your loaded catalog, current plan, preferences, and stored records. Import this file above to restore them.</p>';exportBox.append($('full-export'));data.append(exportBox);
  const source=document.querySelector('.sources');const disclosure=document.createElement('details');disclosure.className='source-disclosure';disclosure.innerHTML='<summary>Data sources & limitations</summary>';source.before(disclosure);disclosure.append(source);
+}
+
+function setupPreferenceNavigation(prefs){
+ const $=id=>document.getElementById(id),original=[...prefs.children];
+ const basics=prefs.querySelector('.basic-preferences'),honors=$('include-honors').closest('label'),weekends=$('maximize-weekends').closest('label'),daily=$('daily-preferences').closest('.tablewrap');
+ const lunch=original.find(n=>n.tagName==='H3'&&n.textContent==='Lunch'),save=$('save-preferences'),intro=original.find(n=>n.tagName==='P');
+ const between=(start,end)=>original.slice(original.indexOf(start),original.indexOf(end));
+ const campusBody=document.createElement('div');campusBody.id='preference-campus-body';
+ const groups=[['basics','Basics',[basics]],['campus','Campus & eligibility',[campusBody,honors,honors.nextElementSibling]],['layout','Weekends & layout',between(weekends,daily).concat(intro)],['daily','Daily rules',between(daily,lunch)],['breaks','Lunch & gaps',between(lunch,save)]];
+ const nav=document.createElement('div');nav.className='preference-nav';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Preference categories');prefs.querySelector('h2').after(nav);
+ const body=document.createElement('div');body.className='preference-body';nav.after(body);
+ for(const [id,title,nodes] of groups){
+  const panel=document.createElement('div');panel.id='preference-'+id;panel.className='preference-category';panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby','preference-tab-'+id);panel.tabIndex=0;panel.append(...nodes);body.append(panel);
+  const button=document.createElement('button');button.type='button';button.id='preference-tab-'+id;button.textContent=title;button.setAttribute('role','tab');button.setAttribute('aria-controls',panel.id);
+  button.onclick=()=>{for(const tab of nav.children){const selected=tab===button;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;document.getElementById(tab.getAttribute('aria-controls')).hidden=!selected;}body.scrollTop=0;};nav.append(button);
+ }
+ nav.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const tabs=[...nav.children],i=tabs.indexOf(document.activeElement);const index=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[index].click();tabs[index].focus();});
+ const footer=prefs.querySelector('.preference-footer');footer.prepend(save,$('preferences-message'));nav.firstElementChild.click();
 }
