@@ -32,16 +32,40 @@ export function setupWorkspace(){
  openWorkspaceTab(['details','preferences','data'].includes(localStorage.getItem('gt-workspace-tab'))?localStorage.getItem('gt-workspace-tab'):'details');
  const info=document.createElement('p');info.className='search-help';info.textContent='Search by course code or title. Results appear as you type.';$('search').after(info);
  new MutationObserver(()=>{$('selected-count').textContent=$('selected').querySelectorAll('.course').length;}).observe($('selected'),{childList:true});
- // Turn the existing import controls into a progressive, three-step workflow.
- const file=$('full-import'),mode=$('full-mode'),cats=$('import-categories'),preview=$('import-preview'),confirm=$('confirm-import');
- const start=document.createElement('div');start.className='data-step';start.innerHTML='<h3>1. Choose a JSON file</h3><p>Use a complete-state export from this scheduler (schema version 1.0). Nothing changes until you review and confirm.</p>';file.closest('label').before(start);start.append(file.closest('label'));
- const review=document.createElement('div');review.className='data-step';review.hidden=true;review.innerHTML='<h3>2. Review what to import</h3><p>Merge adds new records and updates matching identifiers. Replace overwrites only the checked categories.</p>';start.after(review);review.append(mode.closest('label'),cats,preview);
- const final=document.createElement('div');final.className='data-step';final.hidden=true;final.innerHTML='<h3>3. Apply the import</h3><p>Check your selection above, then confirm.</p>';final.append(confirm);review.after(final);
- const names={catalog:'Course catalog',preferences:'Preferences & plan',professors:'Professor records',courseRatings:'Course ratings',events:'Events',profiles:'Profiles',schedules:'Schedule records',registration:'Registration records',history:'History',degreePlans:'Degree plans'};
- for(const label of cats.children){const input=label.querySelector('input');label.lastChild.textContent=names[input.value]||input.value;}
- new MutationObserver(()=>{review.hidden=false;final.hidden=confirm.disabled;}).observe(preview,{childList:true,subtree:true,characterData:true});
- $('full-export').textContent='Download complete JSON backup';const exportBox=document.createElement('div');exportBox.className='data-step';exportBox.innerHTML='<h3>Export a backup</h3><p>Download your loaded catalog, current plan, preferences, and stored records. Import this file above to restore them.</p>';exportBox.append($('full-export'));data.append(exportBox);
+ setupPlanStorage(data,quick);
  const source=document.querySelector('.sources');const disclosure=document.createElement('details');disclosure.className='source-disclosure';disclosure.innerHTML='<summary>Data sources & limitations</summary>';source.before(disclosure);disclosure.append(source);
+}
+
+function setupPlanStorage(data,oldQuick){
+ const $=id=>document.getElementById(id),file=$('full-import'),mode=$('full-mode'),cats=$('import-categories'),preview=$('import-preview'),confirm=$('confirm-import');
+ const title=[...data.querySelectorAll('h3')].find(h=>h.textContent==='JSON import and export');
+ const box=document.createElement('div');box.className='plan-storage';box.innerHTML='<h3>Plans & backups</h3><div class="browser-plan"><div><strong>This browser</strong><p>Save or reload your course selection and basic time settings.</p></div><div class="storage-buttons"></div></div><div class="file-transfer"><div class="storage-export"><h4>Export</h4><label>Include<select id="export-scope"><option value="complete">Complete backup</option><option value="plan">Course plan only</option></select></label><p id="export-scope-help">Catalog, plan, preferences, activities and saved records.</p><button type="button" id="download-state">Download JSON</button></div><div class="storage-import"><h4>Import</h4><p>Choose a course plan or complete backup. The file type is detected automatically.</p></div></div>';
+ title.replaceWith(box);box.querySelector('.storage-buttons').append($('save'),$('restore'));
+ const exportHelp=$('export-scope-help');$('export-scope').onchange=()=>{exportHelp.textContent=$('export-scope').value==='plan'?'Course selection and basic credit / time settings.':'Catalog, plan, preferences, activities and saved records.';};
+ $('download-state').onclick=()=>($('export-scope').value==='plan'?$('share'):$('full-export')).click();
+ box.querySelector('.storage-import').append(file.closest('label'));
+ const review=document.createElement('div');review.className='storage-review';review.hidden=true;review.innerHTML='<h4>Review complete backup</h4><p>Merge updates matching records. Replace overwrites the selected categories.</p>';review.append(mode.closest('label'),cats,preview,confirm);box.append(review,$('data-message'));
+ const names={catalog:'Course catalog',preferences:'Preferences & plan',professors:'Professor records',courseRatings:'Course ratings',events:'Activities',profiles:'Profiles',schedules:'Schedules',registration:'Registration',history:'History',degreePlans:'Degree plans'};
+ for(const label of cats.children){const input=label.querySelector('input');label.lastChild.textContent=names[input.value]||input.value;}
+ const originalImport=file.onchange;
+ file.onchange=async event=>{
+  for(const node of box.querySelectorAll('.storage-plan-review'))node.remove();
+  review.hidden=true;confirm.disabled=true;$('data-message').textContent='';preview.textContent='';
+  const chosen=event.target.files?.[0];if(!chosen)return;
+  try{
+   const value=JSON.parse(await chosen.text());
+   if(Array.isArray(value.selections)&&!value.schemaVersion){
+    const apply=document.createElement('button');apply.type='button';apply.textContent='Import course plan';
+    const notice=document.createElement('p');notice.textContent=`Course plan · ${value.selections.length} courses · term ${value.term||'unknown'}. Replaces your current course selection and basic time settings.`;
+    const planReview=document.createElement('div');planReview.className='storage-plan-review';planReview.append(notice,apply);box.querySelector('.storage-import').append(planReview);
+    apply.onclick=async()=>{apply.disabled=true;await $('import').onchange(event);planReview.remove();};
+   }else{await originalImport(event);review.hidden=confirm.disabled;}
+  }catch(error){$('data-message').textContent='Could not read this JSON file: '+error.message;}
+ };
+ const hidden=document.createElement('div');hidden.hidden=true;hidden.append($('share'),$('import').closest('label'),$('full-export'));box.append(hidden);oldQuick.remove();
+ const componentTitle=data.querySelector('h2'),componentNote=componentTitle.nextElementSibling,editor=$('component-editor'),edit=$('edit-components');
+ const components=document.createElement('details');components.className='component-disclosure';components.innerHTML='<summary>Linked course components</summary>';components.append(componentNote,edit,editor);box.after(components);
+ data.querySelector('hr')?.remove();
 }
 
 function setupPreferenceNavigation(prefs){
