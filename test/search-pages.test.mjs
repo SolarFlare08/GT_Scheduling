@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {solve} from '../lib/advanced-optimizer.mjs';
-import {packSearchResult,unpackSearchPage,recoverySnapshot} from '../public/search-pages.js';
+import {packSearchResult,unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode} from '../public/search-pages.js';
 const json=value=>JSON.parse(JSON.stringify(value));
 test('compact browser snapshot preserves complete schedules and pages without a server',()=>{
  const catalog=Array.from({length:3},(_,i)=>({id:'C'+i,sections:Array.from({length:5},(_,j)=>({crn:`${i}-${j}`,code:'A',campus:'Atlanta',credits:3,status:'open',meetings:[{days:['M','T','W'][i],start:480+j*60,end:530+j*60,room:'Room '+j}]}))}));
@@ -14,6 +14,25 @@ test('compact browser snapshot preserves complete schedules and pages without a 
  assert.deepEqual(json(unpackSearchPage(snapshot,0,50).schedules),json(result.schedules.slice(0,50)));
  const last=unpackSearchPage(snapshot,Math.floor((snapshot.schedules.length-1)/50)*50,50);assert.equal(last.hasMore,false);
  assert.throws(()=>unpackSearchPage(snapshot,4950,50),/no more/);assert.throws(()=>unpackSearchPage(snapshot,-1),/Invalid/);
+});
+test('failure branches are capped, independent, and continue through successive failures',()=>{
+ const sections=Array.from({length:40},(_,i)=>({course:i<20?'A':'B',crn:String(i),meetings:[]}));
+ const schedules=[];for(let a=0;a<20;a++)for(let b=20;b<40;b++)schedules.push({sections:[a,b],score:[0,0,a+b],credits:6});
+ const pool={sections,schedules,settings:{},meta:{warnings:[]}};
+ const baseline=[sections[0],sections[20]],shown={sections:baseline};
+ const node=prepareRecoveryNode(pool,baseline,[],shown);
+ assert.equal(node.snapshot.schedules.length,200);assert.equal(node.branches.size,2);
+ const branch=node.branches.get('0');assert.equal(branch.schedules.length,200);
+ assert.ok(branch.schedules.every(s=>s.sections.every(i=>branch.sections[i].crn!=='0')));
+ // A branch includes options outside the root's top 200.
+ assert.ok(branch.sections.some(s=>!node.snapshot.sections.some(t=>t.crn===s.crn)));
+ const child=prepareRecoveryNode(branch,baseline,['0']);
+ const failNext=unpackSearchPage(branch).schedules[0].sections[1].crn;
+ const next=child.branches.get(failNext);
+ assert.ok(next.schedules.length<=200);
+ assert.ok(next.schedules.every(s=>s.sections.every(i=>!['0',failNext].includes(next.sections[i].crn))));
+ assert.equal(node.branches.get('0'),branch);assert.equal(pool.schedules.length,400);
+ assert.equal(trimSnapshot(pool,1).sections.length,2);
 });
 test('preloaded recovery agrees with a full recovery search and retains its original pool',()=>{
  const catalog=['A','B'].map((id,i)=>({id,sections:[0,1,2].map(j=>({crn:id+j,code:String(j),campus:'Atlanta',credits:3,status:'open',meetings:[{days:i?'T':'M',start:480+j*60,end:530+j*60}]}))}));

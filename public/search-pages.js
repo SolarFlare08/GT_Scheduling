@@ -33,3 +33,22 @@ export function recoverySnapshot(snapshot,baseline,failed){
  schedules.sort((a,b)=>{for(let i=0;i<a.score.length;i++){const delta=a.score[i]-b.score[i];if(Math.abs(delta)>1e-8)return delta;}return 0;});
  return {...snapshot,schedules,meta:{...snapshot.meta,feasibleCount:schedules.length,feasibleCountIsExact:false,optimal:false,bestOptimal:false,alternativesOptimal:false,nodes:0,status:schedules.length?'cached-recovery':'unknown',warnings:['Quick recovery uses preloaded schedules and minimizes changes among those options. Refine recovery searches for potentially better alternatives. Seat availability must be confirmed in OSCAR.']}};
 }
+
+// Each node owns at most 200 schedules and only its immediate failure branches.
+// Reindex sections so trimming also releases unused section objects.
+export function trimSnapshot(snapshot,limit=200){
+ const sections=[],indices=new Map();
+ const schedules=snapshot.schedules.slice(0,limit).map(s=>({...s,sections:s.sections.map(i=>{
+  if(!indices.has(i)){indices.set(i,sections.length);sections.push(snapshot.sections[i]);}return indices.get(i);
+ })}));
+ return {...snapshot,sections,schedules,meta:{...snapshot.meta,feasibleCount:schedules.length,feasibleCountIsExact:false}};
+}
+export function prepareRecoveryNode(pool,baseline,failed=[],shown=null){
+ const snapshot=trimSnapshot(pool),branches=new Map();
+ const current=shown||unpackSearchPage(snapshot).schedules[0];
+ for(const section of current?.sections||[]){
+  if(branches.has(section.crn)||failed.includes(section.crn))continue;
+  branches.set(section.crn,trimSnapshot(recoverySnapshot(pool,baseline,[...failed,section.crn])));
+ }
+ return {snapshot,branches,baseline,failed:[...failed]};
+}

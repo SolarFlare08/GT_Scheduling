@@ -1,6 +1,6 @@
 import {setupCampuses} from './campuses.js';
 import {renderSchedulePicker} from './schedule-picker.js';
-import {unpackSearchPage,recoverySnapshot} from './search-pages.js';
+import {unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode} from './search-pages.js';
 import {setupScheduleSummary} from './schedule-summary.js';
 let summaryView;
 import {compactCode,shortcutCandidate,companionType,courseList,automaticComponents} from './search-shortcuts.js';
@@ -25,15 +25,44 @@ function scheduleAuto(){solveRevision++;searchId=null;clearTimeout(autoTimer);if
 let courses=[],selected=[],schedules=[],active=null,baseline=[],failed=new Set(),resultOffset=0,lastRecovery=false,resultHasMore=false,searchId=null;
 let searchSnapshot=null,snapshotRevision=0,snapshotSelection='',pageMessage='',pageError=false;
 let recoveryPool=null,recoveryPoolKey='';
+let recoveryNode=null,recoveryHistory=[],recoveryGeneration=0;
+let preparingRecovery=false,queuedRecoveryNode=null;
+function recoveryView(){return {node:recoveryNode,snapshot:searchSnapshot,schedules,active,baseline,failed:[...failed],offset:resultOffset,hasMore:resultHasMore,lastRecovery,analysis:$('analysis').textContent};}
+function restoreRecovery(view){
+ recoveryGeneration++;pendingSolve=null;
+ recoveryNode=view.node;searchSnapshot=view.snapshot;schedules=view.schedules;active=view.active;baseline=view.baseline;failed=new Set(view.failed);resultOffset=view.offset;resultHasMore=view.hasMore;lastRecovery=view.lastRecovery;
+ pageMessage='Restored the previous schedule and failures.';pageError=false;$('analysis').textContent=view.analysis;status(pageMessage);calendar();
+}
+function failSection(crn){
+ if(failed.has(crn)||solveRunning)return;
+ recoveryHistory.push(recoveryView());if(recoveryHistory.length>12)recoveryHistory.shift();
+ failed.add(crn);recoveryGeneration++;calendar();optimize(true);
+}
+function recoveryRequest(){return {...config(),catalog:advanced.catalog(),preferences:{...advanced.state().preferences,events:[...(advanced.state().preferences?.events||[]),...activeActivities(advanced.state(),$('term').value)]},availability:advanced.state().registration?.availability,offset:0,limit:50,failed:[...failed],baseline};}
+async function improveRecoveryBranch(node){
+ if(preparingRecovery){queuedRecoveryNode=node;return;}
+ preparingRecovery=true;
+ const generation=++recoveryGeneration,key=recoverySettingsKey();
+ $('recovery-ready').textContent='Preparing the next failure branches…';
+ try{
+  const d=await api('/api/solve',recoveryRequest());
+  if(generation!==recoveryGeneration||node!==recoveryNode||key!==recoverySettingsKey())return;
+  if(d.snapshot){const prepared=prepareRecoveryNode(d.snapshot,baseline,[...failed],active);node.snapshot=prepared.snapshot;node.branches=prepared.branches;}
+  $('recovery-ready').textContent='Next failure branches prepared (up to 200 schedules each).';
+ }catch(error){if(generation===recoveryGeneration)$('recovery-ready').textContent='Using prepared options. Further preparation failed: '+error.message;}
+ finally{preparingRecovery=false;const next=queuedRecoveryNode;queuedRecoveryNode=null;if(next&&next===recoveryNode)improveRecoveryBranch(next);}
+}
 function recoverySettingsKey(){return JSON.stringify([config(),advanced.catalog(),advanced.state().preferences,advanced.state().registration?.availability,activeActivities(advanced.state(),$('term').value)]);}
 function quickRecovery(){
  if(!recoveryPool||!baseline.length||!failed.size||recoveryPoolKey!==recoverySettingsKey())return false;
- const snapshot=recoverySnapshot(recoveryPool,baseline,[...failed]);
+ const branch=recoveryNode?.branches.get([...failed].at(-1));
+ const snapshot=branch||trimSnapshot(recoverySnapshot(recoveryNode?.snapshot||recoveryPool,baseline,[...failed]));
  if(!snapshot.schedules.length)return false;
  const d=unpackSearchPage(snapshot);
  searchSnapshot=snapshot;searchId=null;lastRecovery=true;resultOffset=0;resultHasMore=d.hasMore;schedules=d.schedules;active=schedules[0];
  pageError=false;pageMessage='Quick recovery from preloaded schedules. Refine recovery runs a full search.';
- $('analysis').textContent=resultOverview(d);status(pageMessage);calendar();return true;
+ recoveryNode=prepareRecoveryNode(snapshot,baseline,[...failed],active);
+ $('analysis').textContent=resultOverview(d);status(pageMessage);calendar();improveRecoveryBranch(recoveryNode);return true;
 }
 const selectionKey=()=>JSON.stringify(selected.map(p=>[p.id,p.components,p.requiredComponents]));
 const time=v=>v.split(':').reduce((h,m)=>+h*60+ +m),clock=v=>`${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`;
@@ -45,8 +74,8 @@ function calendar(){
  const shown=active,term=$('term').value;
  if(shown)Promise.allSettled([...new Set(shown.sections.map(s=>s.course))].map(id=>courseGpa(id,term))).then(()=>{if(active===shown&&$('term').value===term)summaryView?.render();});
 }
-function selectSchedule(s){active=s;if(!lastRecovery){baseline=s.sections;failed.clear();}calendar();}
-function renderPicker(){renderSchedulePicker($('alternatives'),{schedules,active,offset:resultOffset,hasMore:resultHasMore,busy:solveRunning,totalSelected:selected.length,message:pageMessage,error:pageError,onSelect:selectSchedule,onPage:changePage});}
+function selectSchedule(s){active=s;recoveryGeneration++;if(!lastRecovery){baseline=s.sections;failed.clear();recoveryHistory=[];}if(searchSnapshot)recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);calendar();}
+function renderPicker(){if($('undo-failure'))$('undo-failure').disabled=!recoveryHistory.length||solveRunning;renderSchedulePicker($('alternatives'),{schedules,active,offset:resultOffset,hasMore:resultHasMore,busy:solveRunning,totalSelected:selected.length,message:pageMessage,error:pageError,onSelect:selectSchedule,onPage:changePage});}
 function changePage(offset){
  if(solveRunning)return;
  if(!searchSnapshot)return optimize(lastRecovery,offset,true);
@@ -54,6 +83,7 @@ function changePage(offset){
   const d=unpackSearchPage(searchSnapshot,offset,50);
   resultOffset=d.offset;resultHasMore=d.hasMore;schedules=d.schedules;active=schedules[0]||null;
   if(!lastRecovery){baseline=active?.sections||[];failed.clear();}
+  recoveryGeneration++;if(!lastRecovery)recoveryHistory=[];recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);
   pageError=false;pageMessage=snapshotRevision===solveRevision?'':'Viewing the saved search. Find schedules applies your latest changes.';
   $('analysis').textContent=resultOverview(d);calendar();
  }catch(error){pageMessage=error.message;pageError=true;renderPicker();}
@@ -71,7 +101,7 @@ function resultStatus(d){
  if(d.solverBackend==='cp-sat')return d.optimal?(d.alternativesOptimal?'CP-SAT search complete; all maximum-coverage schedules ranked.':'CP-SAT proved the best schedule optimal; alternatives are ranked among those found.'):'CP-SAT time limit reached; showing the best schedules found, without an optimality proof.';
  return d.optimal?'Search complete; objective proved optimal for the implemented model.':'Search limit reached; optimality is unproven.';
 }
-async function load(refresh=false){recoveryPool=null;recoveryPoolKey='';solveRevision++;status('Loading published course snapshot…');try{const d=await api('/api/courses?term='+$('term').value+(refresh?'&refresh=1':''));courses=advanced.catalog()||d.courses;schedules=[];active=null;baseline=[];failed.clear();draw();status(`${courses.length} courses · Published snapshot ${d.cached?'from cache':'retrieved'} · Source updated ${d.updatedAt||'unknown'}${d.refreshError?' · Refresh failed: '+d.refreshError:''}`);$('provenance').textContent=`Source: ${d.source} | Retrieved: ${new Date(d.fetchedAt).toLocaleString()} | Source update: ${d.updatedAt||'unknown'}`;}catch(e){status(e.message,true);}}
+async function load(refresh=false){recoveryPool=null;recoveryPoolKey='';recoveryNode=null;recoveryHistory=[];recoveryGeneration++;solveRevision++;status('Loading published course snapshot…');try{const d=await api('/api/courses?term='+$('term').value+(refresh?'&refresh=1':''));courses=advanced.catalog()||d.courses;schedules=[];active=null;baseline=[];failed.clear();draw();status(`${courses.length} courses · Published snapshot ${d.cached?'from cache':'retrieved'} · Source updated ${d.updatedAt||'unknown'}${d.refreshError?' · Refresh failed: '+d.refreshError:''}`);$('provenance').textContent=`Source: ${d.source} | Retrieved: ${new Date(d.fetchedAt).toLocaleString()} | Source update: ${d.updatedAt||'unknown'}`;}catch(e){status(e.message,true);}}
 function draw(){selected=selected.map(p=>{const c=courses.find(c=>c.id===p.id);return c?automaticComponents(c,courses,p).selection:p;});if(searchSnapshot&&snapshotSelection!==selectionKey()){searchSnapshot=null;searchId=null;schedules=[];active=null;baseline=[];failed.clear();pageMessage='';}for(const id of new Set(selected.flatMap(p=>[p.id,...Object.values(p.components||{})])))courseGpa(id).catch(()=>{});campusFilter.render();scheduleAuto();search();$('selected').innerHTML=selected.map(p=>`<div class="course selected-course" style="${courseStyle(p.id,selected.map(p=>p.id))}"><strong>${esc(p.id)}</strong>${(p.componentWarnings||[]).map(w=>`<p>${esc(w)}</p>`).join('')}<button data-remove="${esc(p.id)}">Remove</button><select data-role="${esc(p.id)}" aria-label="Course priority">${['required','preferred','optional','backup'].map(r=>`<option ${p.role===r?'selected':''}>${r}</option>`).join('')}</select><button data-detail="${esc(p.id)}">Compare / lock / exclude sections</button>${p.components?`<p>Linked: ${esc(Object.entries(p.components).filter(([t])=>t!=='lecture').map(([t,id])=>id+' ('+t+')').join(', '))}</p>`:''}${p.lock?`<p>Locked CRN ${esc(p.lock)}</p>`:''}</div>`).join('')||'<p>No courses selected.</p>';calendar();}
 function addCourse(id,batch=false){
  const c=courses.find(c=>c.id===id);if(!c)return;
@@ -102,7 +132,7 @@ function config(){const blocked=$('blocked').value.trim().split(';').filter(x=>x
 async function optimize(recovery=false,offset=0,paging=false,refine=false){
  if(recovery&&!paging&&!refine&&!solveRunning){try{if(quickRecovery())return;}catch(error){status(error.message,true);return;}}
  if(solveRunning){if(!paging)pendingSolve={recovery,offset,paging,refine};return;}
- solveRunning=true;clearTimeout(autoTimer);renderPicker();const revision=solveRevision;
+ solveRunning=true;clearTimeout(autoTimer);renderPicker();const revision=solveRevision,generation=recoveryGeneration;
  try{
   if(!selected.length)throw Error('Add at least one course.');
   if(paging&&!searchId)throw Error('Settings changed. Click Find schedules before changing pages.');
@@ -110,25 +140,33 @@ async function optimize(recovery=false,offset=0,paging=false,refine=false){
   status(paging?'Loading schedule page…':recovery?'Searching recovery options…':'Searching course combinations…');
   const request=paging?{searchId,offset,limit:50}:{...config(),catalog:advanced.catalog(),preferences:{...advanced.state().preferences,events:[...(advanced.state().preferences?.events||[]),...activeActivities(advanced.state(),$('term').value)]},availability:advanced.state().registration?.availability,offset,limit:50,failed:recovery?[...failed]:[],baseline:recovery?baseline:[]};
   const poolKey=!paging&&!recovery?recoverySettingsKey():null;
-  const d=await api('/api/solve',request);if(revision!==solveRevision)return;
+  const d=await api('/api/solve',request);if(revision!==solveRevision||(recovery&&generation!==recoveryGeneration))return;
   resultOffset=d.offset;resultHasMore=d.hasMore;searchId=d.searchId;lastRecovery=recovery;schedules=d.schedules;active=schedules[0]||null;
   if(!paging){searchSnapshot=d.snapshot||null;snapshotRevision=revision;snapshotSelection=selectionKey();if(searchSnapshot)searchSnapshot.meta.warnings=d.warnings;}
   if(!paging&&!recovery){recoveryPool=searchSnapshot;recoveryPoolKey=poolKey;}
   pageMessage='';pageError=false;
   if(!paging&&!recovery){baseline=active?.sections||[];failed.clear();}
-  $('analysis').textContent=resultOverview(d);status(resultStatus(d));calendar();
+  if(!paging&&searchSnapshot){
+   recoveryNode=prepareRecoveryNode(searchSnapshot,baseline,[...failed],active);
+   searchSnapshot=recoveryNode.snapshot;schedules=unpackSearchPage(searchSnapshot).schedules;resultOffset=0;resultHasMore=searchSnapshot.schedules.length>50;
+   if(!recovery){recoveryPool=searchSnapshot;recoveryHistory=[];recoveryGeneration++;}
+   $('recovery-ready').textContent='Failure branches prepared (up to 200 schedules each).';
+  }
+  $('analysis').textContent=resultOverview({...d,schedules,offset:resultOffset})+' Keeping the top 200 schedules per branch; remaining candidates were used to prepare section-failure branches and discarded.';status(resultStatus(d));calendar();
  }catch(e){if(revision===solveRevision){pageMessage=e.message;pageError=true;status(e.message,true);}}
  finally{solveRunning=false;renderPicker();if(pendingSolve){const next=pendingSolve;pendingSolve=null;optimize(next.recovery,next.offset,next.paging,next.refine);}}
 }
-function renderCalendar(){renderPicker();if(!active){$('failures').innerHTML='';$('travel').innerHTML='';}$('calendar').innerHTML='<div class="hours">'+Array.from({length:16},(_,i)=>`<div>${i+7}:00</div>`).join('')+'</div>'+[...'MTWRFSU'].map((d,i)=>`<div class="day"><b>${['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}</b>${(active?.sections||[]).flatMap(s=>s.meetings.filter(m=>m.days.includes(d)).map(m=>`<button class="event ${failed.has(s.crn)?'failed':''}" data-fail="${esc(s.crn)}" style="${courseStyle(s.course,selected.map(p=>p.id))};top:${25+(m.start-420)/2}px;height:${Math.max(22,(m.end-m.start)/2)}px" title="Simulate loss of ${esc(s.course)} ${esc(s.code)}">${esc(s.course)} · ${esc(s.code)}<br>${clock(m.start)}–${clock(m.end)}</button>`)).join('')}</div>`).join('');$('travel').innerHTML=active?.travel?`<h3>Travel between consecutive classes</h3><p>Estimated walking distance and time, not routed directions. ${active.travel.unknown} transfers have unknown locations.</p><div class="tablewrap"><table><tr><th>Day / transition</th><th>Distance</th><th>Walk / gap</th><th>Buffer</th></tr>${active.travel.transfers.map(t=>`<tr><td>${esc(t.day)}: ${esc(t.from)} → ${esc(t.to)}<br>${esc(t.fromRoom)} → ${esc(t.toRoom)}</td><td>${t.unknown?'Unknown':t.meters+' m'}</td><td>${t.unknown?'Unknown':t.minutes+' min'} / ${t.gap} min</td><td>${t.unknown?'Unknown':t.shortfall>0?'Below 2× walk time':'Meets 2× walk time'}</td></tr>`).join('')}</table></div>`:'';$('failures').innerHTML=baseline.map(s=>`<label class="check"><input type="checkbox" data-failure="${esc(s.crn)}" ${failed.has(s.crn)?'checked':''}> Fail ${esc(s.course)} ${esc(s.code)} ${selected.some(p=>p.lock===s.crn)?'(locked)':''}</label>`).join('');}
-document.addEventListener('click',e=>{const d=e.target.dataset;if(d.add)addCourse(d.add);if(d.remove){selected=selected.filter(p=>p.id!==d.remove);draw();}if(d.detail)detail(d.detail);if(d.lock){const p=selected.find(p=>p.id===d.course);p.lock=p.lock===d.lock?null:d.lock;detail(d.course);draw();}if(d.exclude){const p=selected.find(p=>p.id===d.course);p.excluded=p.excluded.includes(d.exclude)?p.excluded.filter(x=>x!==d.exclude):[...p.excluded,d.exclude];detail(d.course);}if(d.prefer){const p=selected.find(p=>p.id===d.course);p.preferredCrns=p.preferredCrns||[];p.preferredCrns=p.preferredCrns.includes(d.prefer)?p.preferredCrns.filter(c=>c!==d.prefer):[...p.preferredCrns,d.prefer];localStorage.setItem('gt-plan',JSON.stringify(config()));detail(d.course);status('Section preference saved. Click Find schedules to apply.');}if(d.option!==undefined){active=schedules[+d.option];calendar();}if(d.fail){failed.add(d.fail);calendar();optimize(true);}});
+function renderCalendar(){renderPicker();if(!active){$('failures').innerHTML='';$('travel').innerHTML='';}$('calendar').innerHTML='<div class="hours">'+Array.from({length:16},(_,i)=>`<div>${i+7}:00</div>`).join('')+'</div>'+[...'MTWRFSU'].map((d,i)=>`<div class="day"><b>${['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}</b>${(active?.sections||[]).flatMap(s=>s.meetings.filter(m=>m.days.includes(d)).map(m=>`<button class="event ${failed.has(s.crn)?'failed':''}" data-fail="${esc(s.crn)}" style="${courseStyle(s.course,selected.map(p=>p.id))};top:${25+(m.start-420)/2}px;height:${Math.max(22,(m.end-m.start)/2)}px" title="Simulate loss of ${esc(s.course)} ${esc(s.code)}">${esc(s.course)} · ${esc(s.code)}<br>${clock(m.start)}–${clock(m.end)}</button>`)).join('')}</div>`).join('');$('travel').innerHTML=active?.travel?`<h3>Travel between consecutive classes</h3><p>Estimated walking distance and time, not routed directions. ${active.travel.unknown} transfers have unknown locations.</p><div class="tablewrap"><table><tr><th>Day / transition</th><th>Distance</th><th>Walk / gap</th><th>Buffer</th></tr>${active.travel.transfers.map(t=>`<tr><td>${esc(t.day)}: ${esc(t.from)} → ${esc(t.to)}<br>${esc(t.fromRoom)} → ${esc(t.toRoom)}</td><td>${t.unknown?'Unknown':t.meters+' m'}</td><td>${t.unknown?'Unknown':t.minutes+' min'} / ${t.gap} min</td><td>${t.unknown?'Unknown':t.shortfall>0?'Below 2× walk time':'Meets 2× walk time'}</td></tr>`).join('')}</table></div>`:'';$('failures').textContent=failed.size?'Unavailable sections: '+[...failed].map(crn=>{const section=recoveryHistory.flatMap(v=>v.active?.sections||[]).find(s=>s.crn===crn);return section?section.course+' '+section.code+' ('+crn+')':crn;}).join(' · '):'No failed sections.';if($('undo-failure'))$('undo-failure').disabled=!recoveryHistory.length||solveRunning;}
+document.addEventListener('click',e=>{const d=e.target.dataset;if(d.add)addCourse(d.add);if(d.remove){selected=selected.filter(p=>p.id!==d.remove);draw();}if(d.detail)detail(d.detail);if(d.lock){const p=selected.find(p=>p.id===d.course);p.lock=p.lock===d.lock?null:d.lock;detail(d.course);draw();}if(d.exclude){const p=selected.find(p=>p.id===d.course);p.excluded=p.excluded.includes(d.exclude)?p.excluded.filter(x=>x!==d.exclude):[...p.excluded,d.exclude];detail(d.course);}if(d.prefer){const p=selected.find(p=>p.id===d.course);p.preferredCrns=p.preferredCrns||[];p.preferredCrns=p.preferredCrns.includes(d.prefer)?p.preferredCrns.filter(c=>c!==d.prefer):[...p.preferredCrns,d.prefer];localStorage.setItem('gt-plan',JSON.stringify(config()));detail(d.course);status('Section preference saved. Click Find schedules to apply.');}if(d.option!==undefined){active=schedules[+d.option];calendar();}if(d.fail)failSection(d.fail);});
 document.addEventListener('change',e=>{const d=e.target.dataset;if(d.role)selected.find(p=>p.id===d.role).role=e.target.value;if(d.failure){e.target.checked?failed.add(d.failure):failed.delete(d.failure);}});
 $('search').oninput=search;
 $('search').onkeydown=e=>{if(e.isComposing||e.repeat||e.ctrlKey||e.metaKey||e.altKey||!['Enter',' '].includes(e.key))return;if(courseList($('search').value)){if(e.key==='Enter'){e.preventDefault();addCourseList();}return;}const results=[...$('results').querySelectorAll('[data-add]')].map(b=>courses.find(c=>c.id===b.dataset.add)).filter(Boolean);const candidate=shortcutCandidate($('search').value,results,e.key);if(candidate){e.preventDefault();addCourse(candidate.id);}else if(e.key==='Enter'){e.preventDefault();status('Type the full course code or narrow the search to one result.');}};
-$('term').onchange=()=>{selected=[];load();};$('refresh').onclick=()=>load(true);$('solve').onclick=()=>optimize();$('recover').onclick=()=>optimize(true);$('reset').onclick=()=>{failed.clear();calendar();};
+$('term').onchange=()=>{selected=[];load();};$('refresh').onclick=()=>load(true);$('solve').onclick=()=>optimize();$('recover').onclick=()=>optimize(true);$('reset').onclick=()=>{if(recoveryHistory.length){const root=recoveryHistory[0];recoveryHistory=[];restoreRecovery(root);}else{failed.clear();calendar();}};
 const refineRecovery=document.createElement('button');refineRecovery.id='refine-recovery';refineRecovery.textContent='Refine recovery';refineRecovery.title='Run a full search beyond the preloaded alternatives';refineRecovery.onclick=()=>optimize(true,0,false,true);$('recover').after(refineRecovery);
+const undoFailure=document.createElement('button');undoFailure.id='undo-failure';undoFailure.textContent='Go back';undoFailure.disabled=true;undoFailure.onclick=()=>{const previous=recoveryHistory.pop();if(previous)restoreRecovery(previous);};$('recover').before(undoFailure);
+const recoveryReady=document.createElement('p');recoveryReady.id='recovery-ready';recoveryReady.setAttribute('role','status');$('failures').after(recoveryReady);
 $('recover').textContent='Quick minimum-change recovery';
-$('calendar').parentElement.querySelector('.hint').textContent='Click a class to mark its section unavailable. Quick recovery uses preloaded schedules, keeping courses first and changing the fewest sections from your selected schedule. Refine recovery runs a full search. If no loaded option works, a full search starts automatically. Locks remain enforced.';
+$('calendar').parentElement.querySelector('.hint').textContent='Click a class to fail that section. Up to 200 schedules are kept per prepared branch. Next failure branches prepare in the background after each choice. Go back undoes a failure; Clear failures restores your starting schedule. Refine recovery runs a full search. Locks remain enforced.';
 function download(name,text,type='application/json'){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 $('save').onclick=()=>{localStorage.setItem('gt-plan',JSON.stringify(config()));status('Plan saved in this browser.');};
 async function restore(p){if(!p||!Array.isArray(p.selections)||p.selections.length>10||![...$('term').options].some(o=>o.value===p.term))throw Error('Invalid configuration');$('term').value=p.term;await load();selected=p.selections.filter(p=>courses.some(c=>c.id===p.id)).map(p=>({...p,excluded:Array.isArray(p.excluded)?p.excluded:[]}));$('min').value=p.minCredits;$('max').value=p.maxCredits;$('early').value=clock(p.earliest);$('late').value=clock(p.latest);$('unknown').checked=!!p.allowUnknown;$('blocked').value=(p.blocked||[]).map(b=>`${b.days} ${clock(b.start)}-${clock(b.end)}`).join('; ');draw();}
