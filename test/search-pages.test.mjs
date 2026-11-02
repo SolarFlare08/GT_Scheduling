@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {solve} from '../lib/advanced-optimizer.mjs';
-import {packSearchResult,unpackSearchPage} from '../public/search-pages.js';
+import {packSearchResult,unpackSearchPage,recoverySnapshot} from '../public/search-pages.js';
 const json=value=>JSON.parse(JSON.stringify(value));
 test('compact browser snapshot preserves complete schedules and pages without a server',()=>{
  const catalog=Array.from({length:3},(_,i)=>({id:'C'+i,sections:Array.from({length:5},(_,j)=>({crn:`${i}-${j}`,code:'A',campus:'Atlanta',credits:3,status:'open',meetings:[{days:['M','T','W'][i],start:480+j*60,end:530+j*60,room:'Room '+j}]}))}));
@@ -14,4 +14,17 @@ test('compact browser snapshot preserves complete schedules and pages without a 
  assert.deepEqual(json(unpackSearchPage(snapshot,0,50).schedules),json(result.schedules.slice(0,50)));
  const last=unpackSearchPage(snapshot,Math.floor((snapshot.schedules.length-1)/50)*50,50);assert.equal(last.hasMore,false);
  assert.throws(()=>unpackSearchPage(snapshot,4950,50),/no more/);assert.throws(()=>unpackSearchPage(snapshot,-1),/Invalid/);
+});
+test('preloaded recovery agrees with a full recovery search and retains its original pool',()=>{
+ const catalog=['A','B'].map((id,i)=>({id,sections:[0,1,2].map(j=>({crn:id+j,code:String(j),campus:'Atlanta',credits:3,status:'open',meetings:[{days:i?'T':'M',start:480+j*60,end:530+j*60}]}))}));
+ const input={selections:catalog.map(c=>({id:c.id,role:'required'}))};
+ const result=solve(catalog,input,{allResults:true}),pool=packSearchResult(result);
+ const baseline=result.schedules[2].sections,failed=[baseline[0].crn];
+ const fast=recoverySnapshot(pool,baseline,failed);
+ const fresh=solve(catalog,{...input,baseline,failed},{allResults:true});
+ assert.deepEqual(fast.schedules.map(s=>s.score),fresh.schedules.map(s=>s.score));
+ assert.deepEqual(new Set(unpackSearchPage(fast).schedules.map(s=>s.sections.map(s=>s.crn).sort().join(','))),new Set(fresh.schedules.map(s=>s.sections.map(s=>s.crn).sort().join(','))));
+ assert.equal(fast.meta.optimal,false);assert.equal(fast.meta.feasibleCountIsExact,false);
+ assert.equal(pool.schedules.length,result.schedules.length);
+ assert.equal(recoverySnapshot(pool,baseline,catalog.flatMap(c=>c.sections.map(s=>s.crn))).schedules.length,0);
 });

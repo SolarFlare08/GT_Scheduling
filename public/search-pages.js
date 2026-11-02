@@ -20,3 +20,16 @@ export function unpackSearchPage(snapshot,offset=0,limit=50){
  });
  return {...snapshot.meta,schedules,offset,limit,hasMore:offset+limit<snapshot.schedules.length};
 }
+
+// Reuse every loaded alternative, with recovery's protected change objective.
+// Filtering preserves the original preference ordering for ties.
+export function recoverySnapshot(snapshot,baseline,failed){
+ const unavailable=new Set(failed),original=new Set(baseline.map(s=>s.crn));
+ const schedules=snapshot.schedules.filter(s=>s.sections.every(i=>!unavailable.has(snapshot.sections[i].crn))).map(s=>{
+  const kept=new Set(s.sections.map(i=>snapshot.sections[i].crn));
+  const changes=[...original].filter(crn=>!kept.has(crn)).length;
+  return {...s,score:[s.score[0],changes,...s.score.slice(2)],factorValues:{...s.factorValues,scheduleChanges:changes}};
+ });
+ schedules.sort((a,b)=>{for(let i=0;i<a.score.length;i++){const delta=a.score[i]-b.score[i];if(Math.abs(delta)>1e-8)return delta;}return 0;});
+ return {...snapshot,schedules,meta:{...snapshot.meta,feasibleCount:schedules.length,feasibleCountIsExact:false,optimal:false,bestOptimal:false,alternativesOptimal:false,nodes:0,status:schedules.length?'cached-recovery':'unknown',warnings:['Quick recovery uses preloaded schedules and minimizes changes among those options. Refine recovery searches for potentially better alternatives. Seat availability must be confirmed in OSCAR.']}};
+}
