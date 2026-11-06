@@ -14,6 +14,8 @@ def fraction(value):
 
 
 def walking_minutes(a, b):
+    if a.get('offCampus') or b.get('offCampus'):
+        return None
     if a.get('room') and a.get('room') == b.get('room'):
         return 0
     x, y = a.get('location'), b.get('location')
@@ -179,12 +181,38 @@ def solve(data):
                         term('schedulePreferences', band.get('penalty', 0), edge)
                 disjoint = ma.get('from') and mb.get('from') and (ma['from'] > mb['to'] or mb['from'] > ma['to'])
                 walk = walking_minutes(ma, mb)
-                if not disjoint and walk is not None:
+                if not any(day in e.get('days', '') and e.get('mode') != 'disabled' for e in settings.get('events', [])) and not disjoint and walk is not None:
                     term('walking', max(0, 2*walk-(mb['start']-ma['end'])), edge)
             model.add(start+sum(incoming[a]) == ys[sa])
             model.add(end+sum(outgoing[a]) == ys[sa])
         model.add(sum(starts) == active)
         model.add(sum(ends) == active)
+
+        # Activities join only the travel path; class counts, class gaps and
+        # weekend objectives retain their existing definitions.
+        events = [e for e in settings.get('events', []) if day in e.get('days', '') and e.get('mode') != 'disabled']
+        if events:
+            travel_nodes = [(m, ys[i]) for m,i,_ in meetings]
+            for event in events:
+                on_campus = event.get('locationMode') == 'on-campus'
+                travel_nodes.append(({**event, 'room':event.get('locationName') if on_campus else 'Off campus' if event.get('locationMode') == 'off-campus' else None, 'offCampus':event.get('locationMode') == 'off-campus', 'location':event.get('location') if on_campus else None}, model.new_constant(1)))
+            travel_nodes.sort(key=lambda item:item[0]['start'])
+            incoming_t, outgoing_t = [[] for _ in travel_nodes], [[] for _ in travel_nodes]
+            firsts, lasts = [], []
+            for a,(ma,selected_a) in enumerate(travel_nodes):
+                first,last = boolean(f'travel_first_{day}_{a}'),boolean(f'travel_last_{day}_{a}')
+                firsts.append(first);lasts.append(last)
+                for b in range(a+1,len(travel_nodes)):
+                    mb,_ = travel_nodes[b]
+                    edge = boolean(f'travel_edge_{day}_{a}_{b}')
+                    outgoing_t[a].append(edge);incoming_t[b].append(edge)
+                    disjoint = ma.get('from') and mb.get('from') and (ma['from'] > mb['to'] or mb['from'] > ma['to'])
+                    walk = walking_minutes(ma,mb)
+                    if not disjoint and walk is not None:
+                        term('walking',max(0,2*walk-(mb['start']-ma['end'])),edge)
+                model.add(first+sum(incoming_t[a]) == selected_a)
+                model.add(last+sum(outgoing_t[a]) == selected_a)
+            model.add(sum(firsts) == 1);model.add(sum(lasts) == 1)
 
         lunch = settings.get('lunch')
         if lunch and day in lunch.get('days', []) and lunch.get('mode') != 'disabled':

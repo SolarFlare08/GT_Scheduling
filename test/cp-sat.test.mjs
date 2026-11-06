@@ -8,6 +8,13 @@ const available=spawnSync(solverPython(),['-c','import ortools'],{windowsHide:tr
 const s=(crn,start,days='M',extra={})=>({crn,code:'A',campus:'Atlanta',credits:3,status:'open',meetings:[{days,start,end:start+50,room:crn,location:{lat:33.77+Number(crn)*.0001,long:-84.39}}],...extra});
 const catalog=[{id:'A',sections:[s('1',600),s('2',800,'TR')]},{id:'B',sections:[s('3',600),s('4',900,'MWF')]}];
 const selections=catalog.map(c=>({id:c.id,role:'required'}));
+test('CP-SAT and Backtracking agree on travel through on-campus and off-campus activities',{skip:!available},async()=>{
+ const courses=[{id:'A',sections:[s('1',655),s('2',655)]}];courses[0].sections[0].meetings[0].location.lat=33.78;courses[0].sections[1].meetings[0].location.lat=33.7701;
+ const event={id:'work',name:'Work',days:'M',start:600,end:650,mode:'required',locationMode:'on-campus',locationName:'Office',location:{lat:33.77,long:-84.39}};
+ const input={selections:[{id:'A'}],minCredits:3,preferences:{events:[event]}};
+ const result=await equivalent(courses,input);assert.equal(result.schedules[0].sections[0].crn,'2');
+ await equivalent(courses,{...input,preferences:{events:[{...event,locationMode:'off-campus'}]}});
+});
 function signature(schedule){return schedule.sections.map(s=>s.crn).sort().join(',');}
 async function equivalent(catalog,input){
  const expected=solve(catalog,input,{allResults:true}),actual=await solveCpSat(catalog,input);

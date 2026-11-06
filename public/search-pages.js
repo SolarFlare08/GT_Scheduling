@@ -16,7 +16,7 @@ export function unpackSearchPage(snapshot,offset=0,limit=50){
  const schedules=snapshot.schedules.slice(offset,offset+limit).map(s=>{
   const sections=s.sections.map(i=>snapshot.sections[i]),groups=new Map();
   for(const section of sections){if(!groups.has(section.course))groups.set(section.course,[]);groups.get(section.course).push(section.crn);}
-  return {...s,sections,bundles:[...groups].map(([course,crns])=>({course,crns})),travel:travelSummary(sections),preferences:evaluate(sections,snapshot.settings)};
+  return {...s,sections,bundles:[...groups].map(([course,crns])=>({course,crns})),travel:travelSummary(sections,snapshot.settings.events),preferences:evaluate(sections,snapshot.settings)};
  });
  return {...snapshot.meta,schedules,offset,limit,hasMore:offset+limit<snapshot.schedules.length};
 }
