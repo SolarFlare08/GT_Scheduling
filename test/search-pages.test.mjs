@@ -1,8 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {solve} from '../lib/advanced-optimizer.mjs';
-import {packSearchResult,unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode,prepareFailureBranches} from '../public/search-pages.js';
+import {packSearchResult,unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode,prepareFailureBranches,releaseFailedLocks} from '../public/search-pages.js';
 const json=value=>JSON.parse(JSON.stringify(value));
+test('failed locks are released independently and the original lock state remains available for undo',()=>{
+ const original=[{id:'A',lock:'1',locks:['1','2'],lockCourse:true},{id:'B',lock:'3'}];
+ const released=releaseFailedLocks(original,['1']);
+ assert.equal(released[0].lock,null);assert.deepEqual(released[0].locks,['2']);assert.equal(released[0].lockCourse,true);assert.equal(released[1].lock,'3');
+ assert.equal(original[0].lock,'1');assert.deepEqual(original[0].locks,['1','2']);
+});
 test('background searches find failure recoveries beyond the initial pool and reuse completed branches',async()=>{
  const catalog=['A','B'].map((id,i)=>({id,sections:[0,1].map(j=>({crn:id+j,code:String(j),campus:'Atlanta',credits:3,meetings:[{days:i?'T':'M',start:480+j*60,end:530+j*60}]}))}));
  const input={selections:catalog.map(c=>({id:c.id})),preferences:{solverBackend:'backtracking'}};

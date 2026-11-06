@@ -1,6 +1,11 @@
 import {travelSummary} from './travel.js';
 import {evaluate} from './preferences.js';
 
+export function releaseFailedLocks(selections,failed=[]){
+ const unavailable=new Set(failed);
+ return selections.map(selection=>({...selection,...(unavailable.has(selection.lock)?{lock:null}:{}),...(selection.locks?{locks:selection.locks.filter(crn=>!unavailable.has(crn))}:{})}));
+}
+
 // Keep a compact copy of the complete result pool in the browser. Section
 // objects occur once, rather than being repeated in thousands of schedules.
 export function packSearchResult(result,settings={}){
@@ -63,7 +68,8 @@ export async function prepareFailureBranches(node,request,solve,{isCurrent=()=>t
   if(node.searched.has(section.crn))continue;
   onProgress({done:node.searched.size,total,section,errors});
   try{
-   const d=await solve({...request,baseline:node.baseline,failed:[...new Set([...node.failed,section.crn])],backgroundPreparation:true});
+   const failed=[...new Set([...node.failed,section.crn])];
+   const d=await solve({...request,selections:releaseFailedLocks(request.selections||[],failed),baseline:node.baseline,failed,backgroundPreparation:true});
    if(!isCurrent())return;
    if(!d.snapshot)throw Error('Recovery search returned no snapshot.');
    const branch=trimSnapshot(d.snapshot);branch.meta.warnings=d.warnings||branch.meta.warnings;

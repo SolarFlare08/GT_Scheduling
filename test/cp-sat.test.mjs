@@ -29,6 +29,8 @@ test('CP-SAT matches complete backtracking results with GPA, recovery, walking a
  await equivalent(catalog,{selections,baseline:[catalog[0].sections[0]],preferences:{maximizeWeekends:true,darkGreenCrns:['2'],lowGpaCrns:['3'],distributionWeight:1}});
 });
 test('CP-SAT enforces linked bundles, failed locks, campuses and honors',{skip:!available},async()=>{
+ const recovery=await equivalent(catalog,{selections:[{id:'A',lock:'1'},{id:'B',lock:'4'}],failed:['1'],minCredits:6});
+ assert.deepEqual(recovery.schedules[0].sections.map(s=>s.crn).sort(),['2','4']);
  const lecture={id:'A',requiredComponents:['lecture','recitation'],sections:[s('1',600),{...s('2',700),code:'A01',component:'recitation',credits:0}]};
  await equivalent([lecture],{selections:[{id:'A',role:'required'}],minCredits:3});
  await equivalent([lecture],{selections:[{id:'A',lock:'1'}],failed:['1']});

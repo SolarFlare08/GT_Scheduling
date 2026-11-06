@@ -1,6 +1,6 @@
 import {setupCampuses} from './campuses.js';
 import {renderSchedulePicker} from './schedule-picker.js';
-import {unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode,prepareFailureBranches} from './search-pages.js';
+import {unpackSearchPage,recoverySnapshot,trimSnapshot,prepareRecoveryNode,prepareFailureBranches,releaseFailedLocks} from './search-pages.js';
 import {setupScheduleSummary} from './schedule-summary.js';
 let summaryView;
 import {compactCode,shortcutCandidate,companionType,courseList,automaticComponents} from './search-shortcuts.js';
@@ -27,16 +27,25 @@ let searchSnapshot=null,snapshotRevision=0,snapshotSelection='',pageMessage='',p
 let recoveryPool=null,recoveryPoolKey='';
 let recoveryNode=null,recoveryHistory=[],recoveryGeneration=0;
 let preparingRecovery=false,queuedRecoveryNode=null;
-function recoveryView(){return {node:recoveryNode,snapshot:searchSnapshot,schedules,active,baseline,failed:[...failed],offset:resultOffset,hasMore:resultHasMore,lastRecovery,analysis:$('analysis').textContent};}
+function recoveryView(){return {node:recoveryNode,snapshot:searchSnapshot,schedules,active,baseline,failed:[...failed],offset:resultOffset,hasMore:resultHasMore,lastRecovery,analysis:$('analysis').textContent,locks:selected.map(p=>({id:p.id,lock:p.lock,locks:p.locks?[...p.locks]:undefined})),poolKey:recoveryPoolKey};}
+function refreshLockIndicators(){
+ for(const card of $('selected').querySelectorAll('.selected-course')){const id=card.querySelector('[data-remove]')?.dataset.remove,p=selected.find(p=>p.id===id);if(!p)continue;const badge=[...card.querySelectorAll('p')].find(n=>n.textContent.startsWith('Locked CRN '));if(badge)badge.remove();if(p.lock){const note=document.createElement('p');note.textContent='Locked CRN '+p.lock;card.append(note);}}
+ for(const button of $('details').querySelectorAll('[data-lock]'))button.textContent=selected.find(p=>p.id===button.dataset.course)?.lock===button.dataset.lock?'Unlock':'Lock';
+ localStorage.setItem('gt-plan',JSON.stringify(config()));
+}
 function restoreRecovery(view){
  recoveryGeneration++;pendingSolve=null;
+ if(view.locks){selected=selected.map(p=>{const previous=view.locks.find(s=>s.id===p.id);return previous?{...p,lock:previous.lock,locks:previous.locks}:p;});recoveryPoolKey=view.poolKey;refreshLockIndicators();}
  recoveryNode=view.node;searchSnapshot=view.snapshot;schedules=view.schedules;active=view.active;baseline=view.baseline;failed=new Set(view.failed);resultOffset=view.offset;resultHasMore=view.hasMore;lastRecovery=view.lastRecovery;
  pageMessage='Restored the previous schedule and failures.';pageError=false;$('analysis').textContent=view.analysis;status(pageMessage);calendar();improveRecoveryBranch(recoveryNode);
 }
 function failSection(crn){
  if(failed.has(crn)||solveRunning)return;
  recoveryHistory.push(recoveryView());if(recoveryHistory.length>12)recoveryHistory.shift();
- failed.add(crn);recoveryGeneration++;calendar();optimize(true);
+ const previousKey=recoverySettingsKey();
+ failed.add(crn);selected=releaseFailedLocks(selected,[...failed]);
+ if(recoveryPoolKey===previousKey)recoveryPoolKey=recoverySettingsKey();
+ refreshLockIndicators();recoveryGeneration++;calendar();optimize(true);
 }
 function recoveryRequest(){return {...config(),catalog:advanced.catalog(),preferences:{...advanced.state().preferences,events:[...(advanced.state().preferences?.events||[]),...activeActivities(advanced.state(),$('term').value)]},availability:advanced.state().registration?.availability,offset:0,limit:50,failed:[...failed],baseline};}
 async function improveRecoveryBranch(node){
@@ -167,7 +176,7 @@ const refineRecovery=document.createElement('button');refineRecovery.id='refine-
 const undoFailure=document.createElement('button');undoFailure.id='undo-failure';undoFailure.textContent='Go back';undoFailure.disabled=true;undoFailure.onclick=()=>{const previous=recoveryHistory.pop();if(previous)restoreRecovery(previous);};$('recover').before(undoFailure);
 const recoveryReady=document.createElement('p');recoveryReady.id='recovery-ready';recoveryReady.setAttribute('role','status');$('failures').after(recoveryReady);
 $('recover').textContent='Quick minimum-change recovery';
-$('calendar').parentElement.querySelector('.hint').textContent='The initial search uses a 15-second search budget. Recovery searches then prepare each section failure in the background, keeping up to 200 schedules per branch. Click a class to follow its failure branch; preparation moves to the schedule now shown. Go back undoes a failure. Locks remain enforced.';
+$('calendar').parentElement.querySelector('.hint').textContent='The initial search uses a 15-second search budget. Recovery searches then prepare each section failure in the background, keeping up to 200 schedules per branch. Click a class to follow its failure branch; preparation moves to the schedule now shown. A failed section automatically releases its lock; other locks remain fixed. Go back restores the schedule and locks.';
 function download(name,text,type='application/json'){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 $('save').onclick=()=>{localStorage.setItem('gt-plan',JSON.stringify(config()));status('Plan saved in this browser.');};
 async function restore(p){if(!p||!Array.isArray(p.selections)||p.selections.length>10||![...$('term').options].some(o=>o.value===p.term))throw Error('Invalid configuration');$('term').value=p.term;await load();selected=p.selections.filter(p=>courses.some(c=>c.id===p.id)).map(p=>({...p,excluded:Array.isArray(p.excluded)?p.excluded:[]}));$('min').value=p.minCredits;$('max').value=p.maxCredits;$('early').value=clock(p.earliest);$('late').value=clock(p.latest);$('unknown').checked=!!p.allowUnknown;$('blocked').value=(p.blocked||[]).map(b=>`${b.days} ${clock(b.start)}-${clock(b.end)}`).join('; ');draw();}
